@@ -1,0 +1,10 @@
+% File name | Label name | Label id | Learn (0), Train (1) or Test (2)
+8
+f6_6_td.dat f6 6 1
+f6_14_td.dat f6 6 0
+f5_9_td.dat f5 5 1
+f5_21_td.dat f5 5 2
+f5_5_td.dat f5 5 2
+f6_18_td.dat f6 6 2
+f6_5_td.dat f6 6 2
+f5_3_td.dat f5 5 0
