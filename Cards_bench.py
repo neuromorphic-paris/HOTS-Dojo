@@ -24,14 +24,14 @@ plt.style.use("dark_background")
 # 
 # =============================================================================
 
-basis_number = [3]
-basis_dimension = [5] 
-taus = [5000]
+basis_number = [3,6]
+basis_dimension = [5,5] 
+taus = [5000,10000]
 
 shuffle_seed = 7
 net_seed = 25
 
-delay_coeff = 10000
+delay_coeff = 15000
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -56,7 +56,7 @@ for label in range(number_of_labels):
          file_name = (pips_folder_position+card_sets[label]+np.str(card_set_starting_number[label]+batch)+"_td.dat")
          data = readATIS_td(file_name, orig_at_zero = True, drop_negative_dt = True, verbose = False, events_restriction = [0, np.inf])
          # I won't use polarity information because is not informative for the given task
-         dataset.append([data[0].copy(), data[1].copy()])
+         dataset.append([data[0].copy(), data[1].copy(), data[2].copy()**0])
          labels.append(label)
 
 
@@ -96,7 +96,7 @@ rng.shuffle(combined_data)
 dataset_testing[:], labels_testing[:] = zip(*combined_data)
 
 # Print an element to check if it's all right
-tsurface=Time_Surface_all(xdim=35, ydim=35, timestamp=0, timecoeff=taus[0], dataset=dataset_learning[2], verbose=True)
+tsurface=Time_Surface_all(xdim=35, ydim=35, timestamp=0, timecoeff=taus[0], dataset=dataset_learning[2], num_polarities=2, minv=0.1, verbose=True)
 
 # Generate the network
 Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, delay_coeff, net_seed)
@@ -137,22 +137,22 @@ print("Learning elapsed time : "+str(elapsed_time))
 
 #%% Learning offline full batch
 
-#start_time = time.time()
-#
-#sparsity_coeff = 0.8
-#learning_rate = 0.2        
-#max_steps = 10
-#base_norm_coeff = 0.0005
-#precision = 0.01
-#  
-#Net.learn_offline(sparsity_coeff, learning_rate, dataset_learning, max_steps, base_norm_coeff, precision)
-#    
-#elapsed_time = time.time()-start_time
-#print("Learning elapsed time : "+str(elapsed_time))           
+start_time = time.time()
+
+sparsity_coeff = 0.8
+learning_rate = 0.2        
+max_steps = 10
+base_norm_coeff = 0.0005
+precision = 0.01
+  
+Net.learn_offline(sparsity_coeff, learning_rate, dataset_learning, max_steps, base_norm_coeff, precision)
+    
+elapsed_time = time.time()-start_time
+print("Learning elapsed time : "+str(elapsed_time))           
     
 #%% Plot Basis 
 
-layer = 0
+layer = 1
 sublayer = 0
 Net.plot_basis(layer, sublayer)
        
@@ -160,8 +160,8 @@ Net.plot_basis(layer, sublayer)
 #%% Reconstruction/Generality Test _single surface_
 
 card_n = 1
-surface_n = -300
-layer = 0
+surface_n = 18
+layer = 1
 sublayer = 0
 
 plt.figure()
@@ -225,5 +225,8 @@ test_norm_hist = np.transpose(normalized_histograms)
 #%% Classification test 
 
 test_results = Net.histogram_classification_test(dataset_testing, labels_testing, number_of_labels, sparsity_coeff)
-
+hist = np.transpose(Net.histograms)
+norm_hist = np.transpose(Net.normalized_histograms)
+test_hist = np.transpose(histograms)
+test_norm_hist = np.transpose(normalized_histograms)
 

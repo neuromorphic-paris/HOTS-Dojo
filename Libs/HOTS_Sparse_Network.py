@@ -19,7 +19,7 @@ from scipy import optimize
 from scipy.spatial import distance 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from Time_Surface_generators import Time_Surface_event
+from Libs.Time_Surface_generators import Time_Surface_event
  
 
 
@@ -90,10 +90,10 @@ def update_basis_online_hard_treshold(Phi_j, a_j, eta, S, lam_phi, max_steps, pr
 # S_list: Input time surfaces used for learning 
 # S_tilde: reconstructed time surface
 # =============================================================================
-def error_func_phi_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam_phi):
+def error_func_phi_full_batch(a_j, Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, S_list, lam_phi):
     #scipy optimize minimze will input a monodimensional array
     #for the Phi_j, thus i need to reconstruct the matrixes 
-    Phi_j = np.reshape(Phi_j, (Phi_j_num, Phi_j_dim, Phi_j_dim))    
+    Phi_j = np.reshape(Phi_j, (Phi_j_num, Phi_j_dim_y, Phi_j_dim_x))    
     err = 0
     for k in range(len(S_list)):
         S_tilde = sum([a*b for a,b in zip(Phi_j,a_j[k])])
@@ -103,10 +103,10 @@ def error_func_phi_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam_phi)
     #the result
     return result.flatten()
 
-def error_func_phi_grad_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam_phi):
+def error_func_phi_grad_full_batch(a_j, Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, S_list, lam_phi):
     #scipy optimize minimze will input a monodimensional array
     #for the Phi_j, thus i need to reconstruct the matrixes  
-    Phi_j = np.reshape(Phi_j, (Phi_j_num, Phi_j_dim, Phi_j_dim))    
+    Phi_j = np.reshape(Phi_j, (Phi_j_num, Phi_j_dim_y, Phi_j_dim_x))    
     #initialize the gradient result
     grad = []
     for i in range(len(Phi_j)):
@@ -122,11 +122,11 @@ def error_func_phi_grad_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam
     return result.flatten()
 
 # function that update basis with conjugate gradient method
-def update_basis_offline_CG(Phi_j, Phi_j_dim, Phi_j_num, a_j, S_list, lam_phi):
+def update_basis_offline_CG(Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, a_j, S_list, lam_phi):
     # Error functions and derivatives for gradient descent
-    Err = lambda Phi_j, Phi_j_dim, Phi_j_num, a_j, S_list, lam_phi: error_func_phi_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam_phi)
-    dErrdPhi = lambda Phi_j, Phi_j_dim, Phi_j_num, a_j, S_list, lam_phi: error_func_phi_grad_full_batch(a_j, Phi_j, Phi_j_dim, Phi_j_num, S_list, lam_phi)
-    res = optimize.minimize(fun=Err, x0=Phi_j.flatten(), args=(Phi_j_dim,
+    Err = lambda Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, a_j, S_list, lam_phi: error_func_phi_full_batch(a_j, Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, S_list, lam_phi)
+    dErrdPhi = lambda Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, a_j, S_list, lam_phi: error_func_phi_grad_full_batch(a_j, Phi_j, Phi_j_dim_x, Phi_j_dim_y, Phi_j_num, S_list, lam_phi)
+    res = optimize.minimize(fun=Err, x0=Phi_j.flatten(), args=(Phi_j_dim_x, Phi_j_dim_y,
                              Phi_j_num, a_j, S_list, lam_phi),
                              method="CG", jac=dErrdPhi)
     #Phi_j = res.x.reshape(..) won't work because the returned Phi_j is not the 
@@ -141,13 +141,22 @@ def update_basis_offline_CG(Phi_j, Phi_j_dim, Phi_j_num, a_j, S_list, lam_phi):
 #               batch 
 # events : the reference events that generated the input timesurfaces
 # delay_coeff : the delay coefficient called alpha in the original paper
+#    
+# It returns on and off events with polarities defined as the index of the base 
+# generating them, do not confuse them with the on off label. 
+# The two matrices are : on_events and off_events. They are composed of 3 columns:
+# The first column is the timestamp array, the second column is a [2*N] array,
+# with the spatial positions of each events. Lastly the third column stores
+# the previously mentioned polarities 
 # =============================================================================    
 def events_from_activations(activations, events, delay_coeff):
     timestamps = events[0]
     out_timestamps_on = []
     out_positions_on = []
+    out_polarities_on = []
     out_timestamps_off = []
     out_positions_off = []
+    out_polarities_off = []
 
     for i,t in enumerate(timestamps):
         for j,a_j in enumerate(activations[i]):
@@ -155,24 +164,32 @@ def events_from_activations(activations, events, delay_coeff):
             if (a_j > 0):
                 out_timestamps_on.append(tout)
                 out_positions_on.append(events[1][i])
+                out_polarities_on.append(j)
             if (a_j < 0):
                 out_timestamps_off.append(tout)
                 out_positions_off.append(events[1][i])
-    
+                out_polarities_off.append(j)
+
     # The output data need to be sorted like the original dataset in respect to
     # the timestamp, because the time surface functions are expecting it to be sorted.
     out_timestamps_on = np.array(out_timestamps_on)
     out_positions_on = np.array(out_positions_on)
+    out_polarities_on = np.array(out_polarities_on)
     out_timestamps_off = np.array(out_timestamps_off)
     out_positions_off = np.array(out_positions_off)
+    out_polarities_off = np.array(out_polarities_off)
+
     sort_ind = np.argsort(out_timestamps_on)
     out_timestamps_on = out_timestamps_on[sort_ind]
     out_positions_on = out_positions_on[sort_ind]
-    on_events = [out_timestamps_on, out_positions_on]
+    out_polarities_on = out_polarities_on[sort_ind]
+    on_events = [out_timestamps_on, out_positions_on, out_polarities_on]
+
     sort_ind = np.argsort(out_timestamps_off)
     out_timestamps_off = out_timestamps_off[sort_ind]
     out_positions_off = out_positions_off[sort_ind]
-    off_events = [out_timestamps_off, out_positions_off]
+    out_polarities_off = out_polarities_off[sort_ind]
+    off_events = [out_timestamps_off, out_positions_off, out_polarities_off]
 
     return on_events, off_events
                 
@@ -221,6 +238,9 @@ class HOTS_Sparse_Net:
         rng = np.random.RandomState()
         if (net_seed!=0):
             rng.seed(net_seed)
+        # In the first layer I am going to process only 2 polarities corresponging
+        # to on off events
+        num_polarities = 2 
         for layer, nbasis in enumerate(basis_number):
             #basis and activations of a single sublayer
             sublayers_basis = []
@@ -230,13 +250,14 @@ class HOTS_Sparse_Net:
                 basis_set = []
                 activations_set = []
                 for j in range(nbasis):
-                    basis_set.append(rng.rand(basis_dimension[layer], basis_dimension[layer]))
+                    basis_set.append(rng.rand(basis_dimension[layer], basis_dimension[layer]*num_polarities))
                     #activations, or aj (as in the paper) are set randomly between -1 and 1
                     activations_set.append((rng.rand()-0.5)*2)
                 sublayers_basis.append(np.array(basis_set))
                 sublayers_activations.append(np.array(activations_set))
             self.basis.append(sublayers_basis)
             self.activations.append(sublayers_activations)
+            num_polarities = nbasis
     
     # Method for online learning, essentially it performs a single step of gradient
     # descent for each time surface, with a settable learning_rate. 
@@ -258,6 +279,9 @@ class HOTS_Sparse_Net:
         batches = []
         # In the first layer the data batches are the input dataset given by the user
         batches.append(dataset)
+        # In the first layer I am going to process only 2 polarities corresponging
+        # to on off events
+        num_polarities = 2 
         for layer in range(self.layers):
             # now let's generate the surfaces and train the layers
             single_layer_surfaces = []
@@ -267,6 +291,7 @@ class HOTS_Sparse_Net:
             outbatches = []
             for sublayer in range(len(self.basis[layer])):
                 sub_layer_surfaces = []
+                all_surfaces = [] # all surfaces computed without distinguishing between batches
                 sub_layer_errors = []
                 sub_layer_outevents_on = []
                 sub_layer_outevents_off = []              
@@ -278,7 +303,10 @@ class HOTS_Sparse_Net:
                         tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch], verbose=False)
+                                                      dataset=batches[sublayer][batch],
+                                                      num_polarities=num_polarities,
+                                                      verbose=False)
+                        all_surfaces.append(tsurface)
                         batch_surfaces.append(tsurface)
                         sub_layer_errors.append(self.sublayer_response_CG(layer, sublayer,
                                                                           tsurface,
@@ -287,7 +315,11 @@ class HOTS_Sparse_Net:
                         #run a single step of the gradient descent
                         update_basis_online_hard_treshold(self.basis[layer][sublayer], self.activations[layer][sublayer],
                                             learning_rate, tsurface, base_norm_coeff, 1, 0)
-                    
+                    #Let's compute again the activations after defining the set of basis
+                    sub_layer_activations = []
+                    for i in range(len(all_surfaces)):
+                        self.sublayer_response_CG(layer, sublayer, all_surfaces[i], sparsity_coeff)
+                        sub_layer_activations.append(self.activations[layer][sublayer].copy()) 
                     # Obtaining the events resulting from the activations in a single batch
                     outevents = events_from_activations(batch_activations,
                                                         [batches[sublayer][batch][0],
@@ -306,6 +338,7 @@ class HOTS_Sparse_Net:
             batches = outbatches.copy()
             self.surfaces.append(single_layer_surfaces)
             self.errors.append(single_layer_errors)
+            num_polarities = self.basis_number[layer]
     
     # Method for offline mini batch learning, in principle similiar to what implemented
     # by Olshausen and Field 1996
@@ -336,6 +369,9 @@ class HOTS_Sparse_Net:
         batches = []
         # In the first layer the data batches are the input dataset given by the user
         batches.append(dataset)
+        # In the first layer I am going to process only 2 polarities corresponging
+        # to on off events
+        num_polarities = 2 
         for layer in range(self.layers):
             # mean surface computed across a mini_batch
             meansurface = np.zeros([self.basis_dimensions[layer],self.basis_dimensions[layer]])
@@ -347,6 +383,7 @@ class HOTS_Sparse_Net:
             outbatches = []
             for sublayer in range(len(self.basis[layer])):
                 sub_layer_surfaces = []
+                all_surfaces = [] # all surfaces computed without distinguishing between batches
                 sub_layer_errors = []
                 sub_layer_outevents_on = []
                 sub_layer_outevents_off = []
@@ -363,7 +400,7 @@ class HOTS_Sparse_Net:
                     if (phase_counter==len(phases_size)):
                         break
                     # Delete any uncomplete meansurface from previous batch
-                    meansurface = np.zeros([self.basis_dimensions[layer],self.basis_dimensions[layer]])                
+                    meansurface = np.zeros([self.basis_dimensions[layer],self.basis_dimensions[layer]*num_polarities])                
                     # counter used to store the number of surface generated, 
                     # useful to understand when it's time to train over a mean 
                     # of the extracted mini_batch
@@ -374,7 +411,10 @@ class HOTS_Sparse_Net:
                         tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch], verbose=False)
+                                                      dataset=batches[sublayer][batch],
+                                                      num_polarities=num_polarities,
+                                                      verbose=False)
+                        all_surfaces.append(tsurface)
                         batch_surfaces.append(tsurface)
                         meansurface = meansurface + tsurface/mini_batch_size
                         surfaces_subset_counter += 1
@@ -391,7 +431,7 @@ class HOTS_Sparse_Net:
                             surfaces_subset_counter = 0
 #                            plt.figure()
 #                            sns.heatmap(meansurface)  
-                            meansurface = np.zeros([self.basis_dimensions[layer],self.basis_dimensions[layer]])
+                            meansurface = np.zeros([self.basis_dimensions[layer],self.basis_dimensions[layer]*num_polarities])
                             sub_layer_activations.append(self.activations[layer][sublayer])
                         if (mini_batch_counter == phases_size[phase_counter]):
                             phase_counter += 1
@@ -399,7 +439,11 @@ class HOTS_Sparse_Net:
                             if(phase_counter == len(phases_size)):
                                 break
 
-
+                    #Let's compute again the activations after defining the set of basis
+                    sub_layer_activations = []
+                    for i in range(len(all_surfaces)):
+                        self.sublayer_response_CG(layer, sublayer, all_surfaces[i], sparsity_coeff)
+                        sub_layer_activations.append(self.activations[layer][sublayer].copy()) 
                     # Obtaining the events resulting from the activations in a single batch
                     outevents = events_from_activations(sub_layer_activations,
                                                         [np.array(in_timestamps),
@@ -423,6 +467,7 @@ class HOTS_Sparse_Net:
             batches = outbatches.copy()
             self.surfaces.append(single_layer_surfaces)
             self.errors.append(single_layer_errors)
+            num_polarities = self.basis_number[layer]
         
     # Method for offline batch learning, derived from Olshausen and Field 1996
     # link : https://www.sciencedirect.com/science/article/pii/S0042698997001697
@@ -456,6 +501,9 @@ class HOTS_Sparse_Net:
         batches = []
         # In the first layer the data batches are the input dataset given by the user
         batches.append(dataset)
+        # In the first layer I am going to process only 2 polarities corresponging
+        # to on off events
+        num_polarities = 2 
         for layer in range(self.layers):
             # now let's generate the surfaces and train the layers
             single_layer_surfaces = []
@@ -478,7 +526,9 @@ class HOTS_Sparse_Net:
                         tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch], verbose=False)
+                                                      dataset=batches[sublayer][batch],
+                                                      num_polarities=num_polarities,
+                                                      verbose=False)
                         batch_surfaces.append(tsurface)
                         # A single array containing all the generated surfaces 
                         # for a single sublayer used for full batch learning
@@ -497,11 +547,12 @@ class HOTS_Sparse_Net:
                         sub_layer_activations.append(self.activations[layer][sublayer].copy())    
 
                     #Let's compute the basis
-                    opt_res = update_basis_offline_CG(self.basis[layer][sublayer], self.basis_dimensions[layer],
+                    opt_res = update_basis_offline_CG(self.basis[layer][sublayer], self.basis_dimensions[layer]*num_polarities,
+                                            self.basis_dimensions[layer], 
                                             self.basis_number[layer], sub_layer_activations,
                                             all_surfaces, base_norm_coeff)
                     self.basis[layer][sublayer] = opt_res.x.reshape(self.basis_number[layer],
-                              self.basis_dimensions[layer], self.basis_dimensions[layer])
+                              self.basis_dimensions[layer], self.basis_dimensions[layer]*num_polarities)
                     sub_layer_errors.append(opt_res.fun)
                     n_steps += 1
                     previous_err = err
@@ -511,6 +562,12 @@ class HOTS_Sparse_Net:
                     print("Execution stopped, requested precision reached")
                 else:
                     print("Maximum number of step reached, last delta error was :" + np.str(abs(err-previous_err)))
+               
+                #Let's compute again the activations after defining the set of basis
+                sub_layer_activations = []
+                for i in range(len(all_surfaces)):
+                    self.sublayer_response_CG(layer, sublayer, all_surfaces[i], sparsity_coeff)
+                    sub_layer_activations.append(self.activations[layer][sublayer].copy()) 
                 # sub_layer_activations contains all the activations to all the time surfaces
                 # of different baches, in order to build the next layer batches 
                 # I need to redefine the original batches ordering of the data
@@ -535,6 +592,7 @@ class HOTS_Sparse_Net:
             batches = outbatches.copy()
             self.surfaces.append(single_layer_surfaces)
             self.errors.append(single_layer_errors)
+            num_polarities = self.basis_number[layer]
                 
                         
                     
@@ -576,6 +634,9 @@ class HOTS_Sparse_Net:
         # In the first layer the data batches are the input dataset given by the user
         batches.append(dataset)
         full_net_activations = []
+        # In the first layer I am going to process only 2 polarities corresponging
+        # to on off events
+        num_polarities = 2 
         for layer in range(self.layers):
             outbatches = []
             layer_activations = []
@@ -592,7 +653,9 @@ class HOTS_Sparse_Net:
                         tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch], verbose=False)
+                                                      dataset=batches[sublayer][batch],
+                                                      num_polarities=num_polarities,
+                                                      verbose=False)
                         batch_surfaces.append(tsurface)
                         sub_layer_errors.append(self.sublayer_response_CG(layer, sublayer,
                                                                           tsurface,
@@ -612,6 +675,7 @@ class HOTS_Sparse_Net:
                 outbatches.append(sub_layer_outevents_off)
             full_net_activations.append(layer_activations)
             batches = outbatches.copy()
+            num_polarities = self.basis_number[layer]
 
         return full_net_activations
     
@@ -718,8 +782,8 @@ class HOTS_Sparse_Net:
             for batch in range(len(dataset)):
                 batch_histogram = sum(last_layer_activity[sublayer][batch])
                 normalized_bach_histogram = batch_histogram/len(last_layer_activity[sublayer][batch])
-                histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram
-                normalized_histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] += normalized_bach_histogram
+                histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = batch_histogram
+                normalized_histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = normalized_bach_histogram
         # compute the distances per each histogram from the models
         distances = []
         predicted_labels = []
@@ -728,9 +792,9 @@ class HOTS_Sparse_Net:
             for label in range(number_of_labels):
                 single_label_distances = []  
                 single_label_distances.append(distance.euclidean(histograms[batch],self.histograms[label]))
-                single_label_distances.append(distance.euclidean(normalized_histograms[batch], self.normalized_histograms[label]))
+                single_label_distances.append(distance.euclidean(normalized_histograms[batch],self.normalized_histograms[label]))
                 Bhattacharyya_array = np.array([np.sqrt(a*b) for a,b in zip(normalized_histograms[batch], self.normalized_histograms[label])]) 
-                single_label_distances.append(sum(Bhattacharyya_array))
+                single_label_distances.append(-np.log(sum(Bhattacharyya_array)))
                 single_batch_distances.append(single_label_distances)
             single_batch_distances = np.array(single_batch_distances)
             single_batch_predicted_labels = np.argmin(single_batch_distances, 0)
