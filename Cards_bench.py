@@ -27,7 +27,8 @@ plt.style.use("dark_background")
 basis_number = [3,6]
 basis_dimension = [5,5] 
 taus = [5000,10000]
-
+# I won't use polarity information because is not informative for the given task
+first_layer_polarities = 1
 shuffle_seed = 7
 net_seed = 25
 
@@ -56,7 +57,7 @@ for label in range(number_of_labels):
          file_name = (pips_folder_position+card_sets[label]+np.str(card_set_starting_number[label]+batch)+"_td.dat")
          data = readATIS_td(file_name, orig_at_zero = True, drop_negative_dt = True, verbose = False, events_restriction = [0, np.inf])
          # I won't use polarity information because is not informative for the given task
-         dataset.append([data[0].copy(), data[1].copy(), data[2].copy()**0])
+         dataset.append([data[0].copy(), data[1].copy(), (data[2].copy()**0)-1])
          labels.append(label)
 
 
@@ -96,45 +97,57 @@ rng.shuffle(combined_data)
 dataset_testing[:], labels_testing[:] = zip(*combined_data)
 
 # Print an element to check if it's all right
-tsurface=Time_Surface_all(xdim=35, ydim=35, timestamp=0, timecoeff=taus[0], dataset=dataset_learning[2], num_polarities=2, minv=0.1, verbose=True)
+tsurface=Time_Surface_all(xdim=35, ydim=35, timestamp=0, timecoeff=taus[0], dataset=dataset_learning[2], num_polarities=1, minv=0.1, verbose=True)
 
 # Generate the network
-Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, delay_coeff, net_seed)
+Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polarities, delay_coeff, net_seed)
+plt.show()
 
-
-#%% Learning-online
+#%% Learning-online-Exp distance and Thresh
 
 start_time = time.time()
 
-sparsity_coeff = 5
-learning_rate = 0.2
-base_norm_coeff = 0.0005
+sparsity_coeff = [0.5, 0.5, 10000]
+learning_rate = [0.8, 0.02, 20000]
+noise_ratio = [1, 0, 50]
+sensitivity = [0.5,0.5,10]
 
-Net.learn_online(sparsity_coeff, learning_rate, dataset_learning, base_norm_coeff)
+Net.learn_online(dataset=dataset_learning,
+                  method="Exp distance", base_norm="Thresh",
+                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
+                  sensitivity=sensitivity,
+                  learning_rate=learning_rate, verbose=False)
 
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
 
-#%% Learning-offline-mean
+# Taking the steady state values to perform the other tests
+sparsity_coeff = sparsity_coeff[1]
+learning_rate = learning_rate[1]
+noise_ratio = noise_ratio[1]
+sensitivity = sensitivity[1]
+#%% Learning-online-CG and Thresh
 
 start_time = time.time()
 
-sparsity_coeff = 0.8
-learning_rate = [5, 2.5, 1.0]
-mini_batch_size = 5
-phases_size = [2400, 2400, 2400]
-max_gradient_steps = 10
+sparsity_coeff = [0.8, 0.8, 1]
+learning_rate = [0.18, 0.18, 1]
+noise_ratio = [0, 0, 50]
 base_norm_coeff = 0.0005
-precision = 0.01
 
-Net.learn_offline_mean(sparsity_coeff, learning_rate,
-                       dataset_learning, mini_batch_size,
-                       phases_size, max_gradient_steps,
-                       base_norm_coeff, precision)
+Net.learn_online(dataset=dataset_learning,
+                  method="CG", base_norm="Thresh",
+                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
+                  learning_rate=learning_rate, verbose=False)
 
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
 
+# Taking the steady state values to perform the other tests
+sparsity_coeff = sparsity_coeff[1]
+learning_rate = learning_rate[1]
+noise_ratio = noise_ratio[1]
+sensitivity = 0
 #%% Learning offline full batch
 
 start_time = time.time()
@@ -145,7 +158,7 @@ max_steps = 10
 base_norm_coeff = 0.0005
 precision = 0.01
   
-Net.learn_offline(sparsity_coeff, learning_rate, dataset_learning, max_steps, base_norm_coeff, precision)
+Net.learn_offline(dataset_learning, sparsity_coeff, learning_rate, max_steps, base_norm_coeff, precision, verbose=False)
     
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))           
@@ -155,19 +168,22 @@ print("Learning elapsed time : "+str(elapsed_time))
 layer = 1
 sublayer = 0
 Net.plot_basis(layer, sublayer)
-       
+plt.show()       
         
-#%% Reconstruction/Generality Test _single surface_
-
-card_n = 1
-surface_n = 18
+#%% Reconstruction/Generality Test _single surface_ 
+#TODO check it, the reconstruction seems not working well
+card_n = 2
+surface_n = 10
 layer = 1
 sublayer = 0
 
-plt.figure()
+plt.figure("Original Surface")
 sns.heatmap(Net.surfaces[layer][sublayer][card_n][surface_n])           
-Net.sublayer_reconstruct(layer, sublayer, Net.surfaces[layer][sublayer][card_n][surface_n], sparsity_coeff)
+Net.sublayer_reconstruct(layer, sublayer, Net.surfaces[layer][sublayer][card_n][surface_n],
+                          "Exp distance", noise_ratio, sparsity_coeff, sensitivity)
 Net.activations[layer][sublayer]
+plt.show()       
+
 #%% Complete batch reconstruction error for a single sublayer
 
 layer = 0
@@ -175,58 +191,25 @@ sublayer = 0
 sparsity_coeff = 0
 timesurfaces = Net.surfaces[layer][sublayer]
 
-Cards_err = Net.batch_sublayer_reconstruct_error(layer, sublayer, timesurfaces, sparsity_coeff)
+Cards_err = Net.batch_sublayer_reconstruct_error(layer, sublayer, timesurfaces,
+                                                 "Exp distance", noise_ratio,
+                                                 sparsity_coeff, sensitivity)
 
 #%% Classification train
-
-Net.histogram_classification_train(dataset_learning, labels_learning, number_of_labels, sparsity_coeff)
-
-
-
-#%%
-
-net_activity = Net.full_net_dataset_response_CG(dataset_testing, sparsity_coeff)
-last_layer_activity = net_activity[-1]
-#%%
-histograms = []
-normalized_histograms = []
-n_basis = Net.basis_number[-1]
-for batch in range(len(dataset_testing)):
-    histograms.append(np.zeros(n_basis*(2**(Net.layers-1))))
-    normalized_histograms.append(np.zeros(n_basis*(2**(Net.layers-1))))
-for sublayer in range(len(last_layer_activity)):
-    for batch in range(len(dataset_testing)):
-        batch_histogram = sum(last_layer_activity[sublayer][batch])
-        normalized_bach_histogram = batch_histogram/len(last_layer_activity[sublayer][batch])
-        histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = batch_histogram
-        normalized_histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = normalized_bach_histogram
-# compute the distances per each histogram from the models
-distances = []
-predicted_labels = []
-for batch in range(len(dataset_testing)):
-    single_batch_distances = []
-    for label in range(number_of_labels):
-        single_label_distances = []  
-        single_label_distances.append(distance.euclidean(histograms[batch],Net.histograms[label]))
-        single_label_distances.append(distance.euclidean(normalized_histograms[batch],Net.normalized_histograms[label]))
-        Bhattacharyya_array = np.array([np.sqrt(a*b) for a,b in zip(normalized_histograms[batch], Net.normalized_histograms[label])]) 
-        single_label_distances.append(-np.log(sum(Bhattacharyya_array)))
-        single_batch_distances.append(single_label_distances)
-    single_batch_distances = np.array(single_batch_distances)
-    single_batch_predicted_labels = np.argmin(single_batch_distances, 0)
-    distances.append(single_batch_distances)
-    predicted_labels.append(single_batch_predicted_labels)
+# TODO there is an error here: check it, the histograms are wrong
+Net.histogram_classification_train(dataset_learning, labels_learning, 
+                                   number_of_labels, "Exp distance", noise_ratio,
+                                   sparsity_coeff, sensitivity)
 
 
-hist = np.transpose(Net.histograms)
-norm_hist = np.transpose(Net.normalized_histograms)
-test_hist = np.transpose(histograms)
-test_norm_hist = np.transpose(normalized_histograms)
+
 #%% Classification test 
 
-test_results = Net.histogram_classification_test(dataset_testing, labels_testing, number_of_labels, sparsity_coeff)
+test_results = Net.histogram_classification_test(dataset_testing, labels_testing,
+                                                 number_of_labels, "Exp distance",
+                                                 noise_ratio, sparsity_coeff, sensitivity)
 hist = np.transpose(Net.histograms)
 norm_hist = np.transpose(Net.normalized_histograms)
-test_hist = np.transpose(histograms)
-test_norm_hist = np.transpose(normalized_histograms)
+test_hist = np.transpose(test_results[2])
+test_norm_hist = np.transpose(test_results[3])
 
