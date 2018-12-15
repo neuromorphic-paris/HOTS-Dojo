@@ -42,8 +42,8 @@ class HOTS_Sparse_Net:
     # of sublayers of this layer will be 2**i 
     # =============================================================================
     # basis_number: it is a list containing the number of basis used for each layer
-    # basis_dimension: it is a list containing the linear dimension of the base set
-    #                for each layer (they are expected to be squared)
+    # basis_dimension: it is a list containing the linear dimensions of the base set
+    #                for each layer 
     # taus: it is a list containing the time coefficient used for the time surface creations
     #       for each layer, all three lists need to share the same lenght obv.
     # first_layer_polarities : The number of polarities that the first layer will
@@ -54,12 +54,12 @@ class HOTS_Sparse_Net:
     # net_seed : seed used for net parameters generation,
     #                       if set to 0 the process will be totally random
     # =============================================================================
-    def __init__(self, basis_number, basis_dimension, taus, first_layer_polarities, delay_coeff, net_seed = 0):
+    def __init__(self, basis_number, basis_dimensions, taus, first_layer_polarities, delay_coeff, net_seed = 0):
         self.basis = []
         self.activations = []
         self.taus = taus
         self.layers = len(basis_number)
-        self.basis_dimensions = basis_dimension
+        self.basis_dimensions = basis_dimensions
         self.basis_number = basis_number
         self.first_layer_polarities = first_layer_polarities
         self.delay_coeff = delay_coeff
@@ -84,8 +84,8 @@ class HOTS_Sparse_Net:
                 basis_set = []
                 activations_set = []
                 for j in range(nbasis):
-                    basis_set.append(rng.rand(basis_dimension[layer], basis_dimension[layer]*num_polarities))
-                    basis_set[j][basis_dimension[layer]//2, [basis_dimension[layer]//2 + basis_dimension[layer]*a  for a in range(num_polarities)]] = 1
+                    basis_set.append(rng.rand(basis_dimensions[layer][1], basis_dimensions[layer][0]*num_polarities))
+                    basis_set[j][basis_dimensions[layer][1]//2, [basis_dimensions[layer][0]//2 + basis_dimensions[layer][0]*a  for a in range(num_polarities)]] = 1
                     #activations, or aj (as in the paper) are set randomly between -1 and 1
                     activations_set.append((rng.rand()-0.5)*2)
                 sublayers_basis.append(np.array(basis_set))
@@ -199,18 +199,21 @@ class HOTS_Sparse_Net:
                 # Counter of surfaces that will be used to update evolution parameters
                 time = 0
                 sub_layer_surfaces = []
+                sub_layer_reference_events = []
                 sub_layer_errors = []
            
                 for batch in range(len(batches[sublayer])):
                     batch_surfaces = []
+                    batch_reference_events = []
                     for k in range(len(batches[sublayer][batch][0])):
                         single_event = [batches[sublayer][batch][0][k], batches[sublayer][batch][1][k]]
-                        tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
-                                                      event=single_event,
-                                                      timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch],
-                                                      num_polarities=num_polarities,
-                                                      verbose=False)
+                        tsurface = Time_Surface_event(xdim = self.basis_dimensions[layer][0],
+                                                    ydim = self.basis_dimensions[layer][1],
+                                                    event=single_event,
+                                                    timecoeff=self.taus[layer],
+                                                    dataset=batches[sublayer][batch],
+                                                    num_polarities=num_polarities,
+                                                    verbose=False)
                         if method=="CG" :
                             sub_layer_errors.append(self.sublayer_response_CG(layer, sublayer,
                                                                                       tsurface,
@@ -223,7 +226,7 @@ class HOTS_Sparse_Net:
                                                                                         noise_evolution[time], 
                                                                                         sensitivity_evolution[time]))
                         batch_surfaces.append(tsurface)
-
+                        batch_reference_events.append(single_event)
                         # Run a single step of the gradient descent
                         if base_norm=="L2":
                             update_basis_online(self.basis[layer][sublayer], self.activations[layer][sublayer],
@@ -241,8 +244,8 @@ class HOTS_Sparse_Net:
                             plt.pause(0.0001)
                         time += 1
                     sub_layer_surfaces.append(batch_surfaces)
-                
-                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str((batch/len(batches[sublayer]))*100)+"%")
+                    sub_layer_reference_events.append(batch_reference_events)
+                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
 
                 # Check if we are at the last layer or we need to recompute the activations
                 # to train the next layer
@@ -273,8 +276,7 @@ class HOTS_Sparse_Net:
 
                         # Obtaining the events resulting from the activations in a single batch
                         outevents = events_from_activations(batch_activations,
-                                                            [batches[sublayer][batch][0],
-                                                             batches[sublayer][batch][1]],
+                                                            sub_layer_reference_events[batch],
                                                              self.delay_coeff)
                         sub_layer_outevents_on.append(outevents[0])
                         sub_layer_outevents_on.append(outevents[1])
@@ -322,7 +324,8 @@ class HOTS_Sparse_Net:
     # verbose : If verbose is on, it will display graphs to assest the ongoing,
     #           learning algorithm
     # =============================================================================      
-    def learn_offline(self, dataset, sparsity_coeff, learning_rate, max_steps, base_norm_coeff, precision, verbose=False):
+    def learn_offline(self, dataset, sparsity_coeff, learning_rate,
+                      max_steps, base_norm_coeff, precision, verbose=False):
         # The list of all data batches devided for sublayer 
         # batches[sublayer][actual_batch][timestamp if 0 or xy coordinates if 1]
         batches = []
@@ -345,14 +348,17 @@ class HOTS_Sparse_Net:
                 # A single array containing all the generated surfaces 
                 # for a single sublayer used for full batch learning 
                 all_surfaces = []
+                all_reference_events = []
                 # Plot basis if required 
                 if verbose is True:
-                    figures, axes = create_figures(surfaces=self.basis[layer][sublayer], num_of_plots=self.basis_number[layer])
+                    figures, axes = create_figures(surfaces=self.basis[layer][sublayer],
+                                                   num_of_plots=self.basis_number[layer])
                 for batch in range(len(batches[sublayer])):
                     batch_surfaces = []
                     for k in range(len(batches[sublayer][batch][0])):
                         single_event = [batches[sublayer][batch][0][k], batches[sublayer][batch][1][k]]
-                        tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
+                        tsurface = Time_Surface_event(xdim = self.basis_dimensions[layer][0],
+                                                      ydim = self.basis_dimensions[layer][1],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
                                                       dataset=batches[sublayer][batch],
@@ -361,7 +367,8 @@ class HOTS_Sparse_Net:
                         batch_surfaces.append(tsurface)
                         # A single array containing all the generated surfaces 
                         # for a single sublayer used for full batch learning
-                        all_surfaces.append(tsurface)                    
+                        all_surfaces.append(tsurface) 
+                        all_reference_events.append(single_event)
                     sub_layer_surfaces.append(batch_surfaces)
                 
                 # Learning time
@@ -374,14 +381,15 @@ class HOTS_Sparse_Net:
                     for i in range(len(all_surfaces)):
                         self.sublayer_response_CG(layer, sublayer, all_surfaces[i], sparsity_coeff, 0)
                         sub_layer_activations.append(self.activations[layer][sublayer].copy())    
-
                     #Let's compute the basis
-                    opt_res = update_basis_offline_CG(self.basis[layer][sublayer], self.basis_dimensions[layer]*num_polarities,
-                                            self.basis_dimensions[layer], 
-                                            self.basis_number[layer], sub_layer_activations,
-                                            all_surfaces, base_norm_coeff)
+                    opt_res = update_basis_offline_CG(self.basis[layer][sublayer],
+                                                      self.basis_dimensions[layer][0]*num_polarities,
+                                                      self.basis_dimensions[layer][1], 
+                                                      self.basis_number[layer], sub_layer_activations,
+                                                      all_surfaces, base_norm_coeff)
+                    
                     self.basis[layer][sublayer] = opt_res.x.reshape(self.basis_number[layer],
-                              self.basis_dimensions[layer], self.basis_dimensions[layer]*num_polarities)
+                              self.basis_dimensions[layer][1], self.basis_dimensions[layer][0]*num_polarities)
                     sub_layer_errors.append(opt_res.fun)
                     # Plot updated basis at each cycle if required
                     if verbose is True:
@@ -410,8 +418,7 @@ class HOTS_Sparse_Net:
                     current_batch_length = len(batches[sublayer][batch][0])       
                     # Obtaining the events resulting from the activations in a single batch
                     outevents = events_from_activations(sub_layer_activations[current_position:(current_position+current_batch_length)],
-                                                        [batches[sublayer][batch][0],
-                                                         batches[sublayer][batch][1]],
+                                                        all_reference_events[current_position:(current_position+current_batch_length)],
                                                          self.delay_coeff)
                     sub_layer_outevents_on.append(outevents[0])
                     sub_layer_outevents_off.append(outevents[1])
@@ -477,7 +484,7 @@ class HOTS_Sparse_Net:
         euclidean_distances = []
         for i, base in enumerate(self.basis[layer][sublayer]):
             euclidean_distances.append(np.sum(np.abs(base-timesurface)**2))
-        activations = np.exp(-sparsity_coeff*np.array(euclidean_distances))
+        activations = np.exp(-sensitivity*np.array(euclidean_distances))
         # Here I mix noise with the activations
         activations = activations*(1-noise_coeff) + (noise_coeff)*np.exp(-np.random.rand(len(activations)))
         # Here I implement the lateral inhibition
@@ -542,17 +549,19 @@ class HOTS_Sparse_Net:
                 sub_layer_activations = []
                 for batch in range(len(batches[sublayer])):
                     batch_surfaces = []
+                    batch_reference_events = []
                     batch_activations = []
                     for k in range(len(batches[sublayer][batch][0])):
                         single_event = [batches[sublayer][batch][0][k], batches[sublayer][batch][1][k]]
-                        tsurface = Time_Surface_event(ldim = self.basis_dimensions[layer],
+                        tsurface = Time_Surface_event(xdim = self.basis_dimensions[layer][0],
+                                                      ydim = self.basis_dimensions[layer][1],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
                                                       dataset=batches[sublayer][batch],
                                                       num_polarities=num_polarities,
                                                       verbose=False)
                         batch_surfaces.append(tsurface)
-
+                        batch_reference_events.append(single_event)
                         if method == "CG":
                             sub_layer_errors.append(self.sublayer_response_CG(layer, sublayer,
                                                                               tsurface,
@@ -569,13 +578,12 @@ class HOTS_Sparse_Net:
                         batch_activations.append(self.activations[layer][sublayer])
                     # Obtaining the events resulting from the activations in a single batch
                     outevents = events_from_activations(batch_activations,
-                                                        [batches[sublayer][batch][0],
-                                                         batches[sublayer][batch][1]],
+                                                        batch_reference_events,
                                                          self.delay_coeff)
                     sub_layer_outevents_on.append(outevents[0])
                     sub_layer_outevents_off.append(outevents[1])
                     sub_layer_activations.append(batch_activations)
-                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Batch processing:"+np.str((batch/len(batches[sublayer]))*100)+"%")
+                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Batch processing:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
                 layer_activations.append(sub_layer_activations)
                 outbatches.append(sub_layer_outevents_on)       
                 outbatches.append(sub_layer_outevents_off)
@@ -719,30 +727,30 @@ class HOTS_Sparse_Net:
                                                       noise_ratio, 
                                                       sparsity_coeff,
                                                       sensitivity)
+        
+        
         last_layer_activity = net_activity[-1]        
         histograms = []
         normalized_histograms = []
         n_basis = self.basis_number[-1]
+        # Normalization factor for building normalized histograms
+        input_spikes_per_label = np.zeros(number_of_labels)
+        batch_per_label  = np.zeros(number_of_labels)
         # this array it's used to count the number of batches with a certain label,
-        # the values will be then used to compute normalized histograms
+        # the values will be then used to compute mean histograms
         for label in range(number_of_labels):
             histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
             normalized_histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
-        for sublayer in range(len(last_layer_activity)):
-            num_of_batch_per_labels = np.zeros(number_of_labels)
-            for batch in range(len(dataset)):
-                current_label = labels[batch]
+        for batch in range(len(dataset)):
+            current_label = labels[batch]
+            input_spikes_per_label[current_label] += len(dataset[batch][0])
+            batch_per_label[current_label] += 1            
+            for sublayer in range(len(last_layer_activity)):
                 batch_histogram = sum(last_layer_activity[sublayer][batch])
-                if len(last_layer_activity[sublayer][batch]) != 0 :
-                    normalized_bach_histogram = batch_histogram/len(last_layer_activity[sublayer][batch])
-                else:   
-                    normalized_bach_histogram = batch_histogram
-                histograms[current_label][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram
-                normalized_histograms[current_label][n_basis*sublayer:n_basis*(sublayer+1)] += normalized_bach_histogram
-                num_of_batch_per_labels[current_label] += 1
+                histograms[current_label][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram               
         for label in range(number_of_labels):
-            normalized_histograms[label] = normalized_histograms[label]/num_of_batch_per_labels[label]
-            histograms[label] = histograms[label]/num_of_batch_per_labels[label]
+            normalized_histograms[label] = histograms[label]/input_spikes_per_label[label]
+            histograms[label] = histograms[label]/batch_per_label[label]
         self.histograms = histograms
         self.normalized_histograms = normalized_histograms
         print("Training ended, you can now look at the histograms with in the attribute .histograms and .normalized_histograms")
@@ -786,18 +794,18 @@ class HOTS_Sparse_Net:
         histograms = []
         normalized_histograms = []
         n_basis = self.basis_number[-1]
+        # Normalization factor for building normalized histograms
+        input_spikes_per_batch = np.zeros(len(dataset))
         for batch in range(len(dataset)):
             histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
             normalized_histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
-        for sublayer in range(len(last_layer_activity)):
-            for batch in range(len(dataset)):
+        for batch in range(len(dataset)):
+            input_spikes_per_batch[batch] += len(dataset[batch][0])
+            for sublayer in range(len(last_layer_activity)):
                 batch_histogram = sum(last_layer_activity[sublayer][batch])
-                if len(last_layer_activity[sublayer][batch]) != 0 :
-                    normalized_bach_histogram = batch_histogram/len(last_layer_activity[sublayer][batch])
-                else:
-                    normalized_bach_histogram = batch_histogram
-                histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = batch_histogram
-                normalized_histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] = normalized_bach_histogram
+                histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram               
+        for batch in range(len(dataset)):
+            normalized_histograms[batch] = histograms[batch]/input_spikes_per_batch[batch]
         # compute the distances per each histogram from the models
         distances = []
         predicted_labels = []
