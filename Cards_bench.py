@@ -37,7 +37,7 @@ first_layer_polarities = 1
 shuffle_seed = 7
 net_seed = 25
 
-delay_coeff = 900
+delay_coeff = 800
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -114,9 +114,9 @@ Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polaritie
 start_time = time.time()
 
 sparsity_coeff = [0.5, 0.5, 10000]
-learning_rate = [0.8, 0.02, 50000]
+learning_rate = [1, 1, 10000]
 noise_ratio = [1, 0, 1000]
-sensitivity = [0.1,0.7,50000]
+sensitivity = [0.1, 0.1, 10000]
 
 Net.learn_online(dataset=dataset_learning,
                   method="Exp distance", base_norm="Thresh",
