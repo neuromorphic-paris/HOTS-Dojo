@@ -149,7 +149,8 @@ class HOTS_Sparse_Net:
         
         # Setting the number of polarities for the first layer 
         num_polarities = self.first_layer_polarities
-
+        
+        self.evolution_pre_allocation(len(dataset))
         for layer in range(self.layers):
             # now let's generate the surfaces and train the layers
             single_layer_surfaces = []
@@ -157,7 +158,6 @@ class HOTS_Sparse_Net:
             # The result of a single layer learning that will serve as the batches for the 
             # next one
             outbatches = []
-            
             
             for sublayer in range(len(self.basis[layer])):
               
@@ -243,6 +243,8 @@ class HOTS_Sparse_Net:
                             plt.draw()
                             plt.pause(0.0001)
                         time += 1
+                    if time!=0:                        
+                        self.evolution_save_point(layer, sublayer, batch, noise_evolution[time-1], sparsity_evolution[time-1], sensitivity_evolution[time-1], learning_evolution[time-1])
                     sub_layer_surfaces.append(batch_surfaces)
                     sub_layer_reference_events.append(batch_reference_events)
                     print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
@@ -279,7 +281,7 @@ class HOTS_Sparse_Net:
                                                             sub_layer_reference_events[batch],
                                                              self.delay_coeff)
                         sub_layer_outevents_on.append(outevents[0])
-                        sub_layer_outevents_on.append(outevents[1])
+                        sub_layer_outevents_off.append(outevents[1])
                         
                     
                     # They will be used to optimize the consequent of sublayers
@@ -435,9 +437,54 @@ class HOTS_Sparse_Net:
             self.surfaces.append(single_layer_surfaces)
             self.errors.append(single_layer_errors)
             num_polarities = self.basis_number[layer]
+
+    # Method that preallocates lists that will store evolution save points
+    # =============================================================================
+    # dataset_length : the lenght of the entire dataset in number of batches
+    # =============================================================================  
+    def evolution_pre_allocation(self, dataset_length):
+        #it will store the intial basis too, thus +1 on the dataset length 
+        self.basis_history=[[[np.zeros(self.basis[layer][sublayer].shape) for batch in range(dataset_length+1)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        for layer in range(self.layers):
+            for sublayer in range(2**layer):
+                self.basis_history[layer][sublayer][0]=self.basis[layer][sublayer]
+        self.noise_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.sparsity_history=self.noise_history.copy()
+        self.sensitivity_history=self.noise_history.copy()
+        self.learning_history=self.noise_history.copy()
+        self.basis_distance=[[[np.zeros(len(self.basis[layer][sublayer])) for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        
                 
-                        
-                    
+    # Method useful to save network status in relation of its previous history
+    # in this way is possible to test evolution parameters and test wether an 
+    # online method is overfitting in a particular batch.
+    # In the future the outlook of the online method will be to implement overparameters
+    # to control the network in a fine and less supervised manner.
+    # Thus this method won't be needed anymore
+    # =============================================================================
+    # layer : the index of the selected layer 
+    # sublayer : the index of the selected sublayer 
+    # batch : the index of the batch in the dataset
+    # noise: the noise coefficient at the saving time.
+    # sparsity: the sparsity coefficient at the saving time.
+    # sensitivity: the sensitivity coefficient at the saving time.
+    # learning: the learning rate at the saving time.
+    #
+    # It saves the set of basis, and the status of the evolution parameters.
+    # =============================================================================  
+    def evolution_save_point(self, layer, sublayer, batch, noise, sparsity, sensitivity, learning):
+        self.basis_history[layer][sublayer][batch+1]=self.basis[layer][sublayer]
+        self.noise_history[layer][sublayer][batch]=noise
+        self.sparsity_history[layer][sublayer][batch]=sparsity
+        self.sensitivity_history[layer][sublayer][batch]=sensitivity
+        self.learning_history[layer][sublayer][batch]=learning
+        distance = np.zeros(len(self.basis[layer][sublayer]))
+        for i,feature in enumerate(self.basis[layer][sublayer]):
+            distance[i] = np.sum(self.basis_history[layer][sublayer][batch][i,:,:]-feature)**2
+        self.basis_distance[layer][sublayer][batch]=distance
+                
+        
+        
     # Method for computing and updating the network activations for a single time surface
     # using conjugate gradient descent
     # =============================================================================

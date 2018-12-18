@@ -29,15 +29,15 @@ plt.style.use("dark_background")
 # 
 # =============================================================================
 
-basis_number = [3,6,9]
-basis_dimension = [[5,5],[5,5],[5,5]]
-taus = [10000,15000,20000]
+basis_number = [3,6]
+basis_dimension = [[5,5],[5,5]]
+taus = [10000,15000]
 # I won't use polarity information because is not informative for the given task
 first_layer_polarities = 1
 shuffle_seed = 7
 net_seed = 25
 
-delay_coeff = 800
+delay_coeff = 45000
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -113,10 +113,10 @@ Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polaritie
 
 start_time = time.time()
 
-sparsity_coeff = [0.5, 0.5, 10000]
-learning_rate = [1, 1, 10000]
+sparsity_coeff = [1, 1, 10000]
+learning_rate = [0.02, 0.02, 10000]
 noise_ratio = [1, 0, 1000]
-sensitivity = [0.1, 0.1, 10000]
+sensitivity = [0.1, 0.8, 50000]
 
 Net.learn_online(dataset=dataset_learning,
                   method="Exp distance", base_norm="Thresh",
@@ -173,16 +173,16 @@ sensitivity = sensitivity[1]
     
 #%% Plot Basis 
 
-#layer = 2
+#layer = 0
 #sublayer = 0
 #Net.plot_basis(layer, sublayer)
 #plt.show()       
         
 #%% Reconstruction/Generality Test _single surface_ 
 #TODO check it, the reconstruction seems not working well
-#card_n = 2
-#surface_n = 3000
-#layer = 1
+#card_n = -1
+#surface_n = -3
+#layer = 0
 #sublayer = 0
 #
 #plt.figure("Original Surface")
