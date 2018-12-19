@@ -18,6 +18,10 @@ os.environ['MKL_NUM_THREADS'] = '1'
 # Plotting settings
 plt.style.use("dark_background")
 
+#activation_method = "CG"
+activation_method = "Exp distance"
+#activation_method = "Dot product"
+
 # Network settings
 # =============================================================================
 # nbasis is a list containing the number of basis used for each layer
@@ -37,7 +41,7 @@ first_layer_polarities = 1
 shuffle_seed = 7
 net_seed = 25
 
-delay_coeff = 45000
+delay_coeff = 900
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -119,7 +123,7 @@ noise_ratio = [1, 0, 1000]
 sensitivity = [0.1, 0.8, 50000]
 
 Net.learn_online(dataset=dataset_learning,
-                  method="Exp distance", base_norm="Thresh",
+                  method=activation_method, base_norm="Thresh",
                   noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
                   sensitivity=sensitivity,
                   learning_rate=learning_rate, verbose=False)
@@ -206,7 +210,7 @@ sensitivity = sensitivity[1]
 #%% Classification train
 # TODO there is an error here: check it, the histograms are wrong
 Net.histogram_classification_train(dataset_learning, labels_learning, 
-                                   number_of_labels, "Exp distance", noise_ratio,
+                                   number_of_labels, activation_method, noise_ratio,
                                    sparsity_coeff, sensitivity)
 
 
@@ -214,7 +218,7 @@ Net.histogram_classification_train(dataset_learning, labels_learning,
 #%% Classification test 
 
 test_results = Net.histogram_classification_test(dataset_testing, labels_testing,
-                                                 number_of_labels, "Exp distance",
+                                                 number_of_labels, activation_method,
                                                  noise_ratio, sparsity_coeff, sensitivity)
 hist = np.transpose(Net.histograms)
 norm_hist = np.transpose(Net.normalized_histograms)

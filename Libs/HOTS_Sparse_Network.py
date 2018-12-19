@@ -225,6 +225,12 @@ class HOTS_Sparse_Net:
                                                                                         sparsity_evolution[time], 
                                                                                         noise_evolution[time], 
                                                                                         sensitivity_evolution[time]))
+                        if method=="Dot product":
+                            sub_layer_errors.append(self.sublayer_response_dot_product(layer, sublayer,
+                                                                                        tsurface,
+                                                                                        sparsity_evolution[time], 
+                                                                                        noise_evolution[time], 
+                                                                                        sensitivity_evolution[time]))
                         batch_surfaces.append(tsurface)
                         batch_reference_events.append(single_event)
                         # Run a single step of the gradient descent
@@ -529,8 +535,8 @@ class HOTS_Sparse_Net:
     # =============================================================================  
     def sublayer_response_exp_distance(self, layer, sublayer, timesurface, sparsity_coeff, noise_coeff, sensitivity):
         euclidean_distances = []
-        for i, base in enumerate(self.basis[layer][sublayer]):
-            euclidean_distances.append(np.sum(np.abs(base-timesurface)**2))
+        for i, feat in enumerate(self.basis[layer][sublayer]):
+            euclidean_distances.append(np.sum(np.abs(feat-timesurface)**2))
         activations = np.exp(-sensitivity*np.array(euclidean_distances))
         # Here I mix noise with the activations
         activations = activations*(1-noise_coeff) + (noise_coeff)*np.exp(-np.random.rand(len(activations)))
@@ -548,7 +554,42 @@ class HOTS_Sparse_Net:
         error =  np.sum(residue**2)
         return error
     
-    
+    # Method for computing and updating the network activations for a single time surface
+    # using exponential distance between the surface and the basis
+    # =============================================================================
+    # layer : the index of the selected layer 
+    # sublayer : the index of the selected sublayer 
+    # timesurface: the imput time surface
+    # sparsity_coeff: It is a value moltiplicating the activity of the best 
+    #                 fitting base. The result will be subtracted to the other
+    #                 activities de facto implementing a simple lateral inhibition
+    # noise_coeff: coefficient use to add noise to the net activities
+    # sensitivity: it shapes the sensitivty for each feature in computing the 
+    #              activities of each base
+    # It also return the Error of reconstruction of the whole timesurface
+    # =============================================================================  
+    def sublayer_response_dot_product(self, layer, sublayer, timesurface, sparsity_coeff, noise_coeff, sensitivity):
+        projections = []
+        norm_timesurface = np.sqrt(np.sum(timesurface**2))
+        for i, feat in enumerate(self.basis[layer][sublayer]):
+            norm_feat = np.sqrt(np.sum(feat**2))
+            projections.append(np.sum(np.multiply(feat,timesurface))/(norm_feat*norm_timesurface))
+        activations = np.array(projections)
+        # Here I mix noise with the activations
+        activations = activations*(1-noise_coeff) + (noise_coeff)*np.exp(-np.random.rand(len(activations)))
+        # Here I implement the lateral inhibition
+        winner_ind=np.argmax(activations)
+        losers_ind= np.arange(len(activations))!=winner_ind
+        activations[losers_ind] = activations[losers_ind]-sparsity_coeff*activations[winner_ind]
+        # I kill the basis too inhibited (with negative values) and update the activities
+        activations[activations<=0] = 0
+        self.activations[layer][sublayer] = activations
+        # Here i compute the error as the euclidean distance between a reconstruced
+        # Time surface and the original one
+        S_tilde = sum([a*b for a,b in zip(self.basis[layer][sublayer], activations)])
+        residue = timesurface-S_tilde
+        error =  np.sum(residue**2)
+        return error
 
     # Method for computing the network response for a whole dataset
     # =============================================================================
@@ -616,10 +657,16 @@ class HOTS_Sparse_Net:
                                                                               noise_ratio))
                         if method == "Exp distance": 
                             sub_layer_errors.append(self.sublayer_response_exp_distance(layer, sublayer,
-                                                                          tsurface,
-                                                                          sparsity_coeff, 
-                                                                          noise_ratio, 
-                                                                          sensitivity))
+                                                                                        tsurface,
+                                                                                        sparsity_coeff, 
+                                                                                        noise_ratio, 
+                                                                                        sensitivity))
+                        if method=="Dot product":
+                            sub_layer_errors.append(self.sublayer_response_dot_product(layer, sublayer,
+                                                                                       tsurface,
+                                                                                       sparsity_coeff, 
+                                                                                       noise_ratio, 
+                                                                                       sensitivity))
                         
                         
                         batch_activations.append(self.activations[layer][sublayer])
@@ -681,6 +728,12 @@ class HOTS_Sparse_Net:
                                                         sparsity_coeff, 
                                                         noise_ratio, 
                                                         sensitivity)
+        if method=="Dot product":
+            error = self.sublayer_response_dot_product(layer, sublayer,
+                                                       timesurface,
+                                                       sparsity_coeff, 
+                                                       noise_ratio, 
+                                                       sensitivity)
         print("Layer activity : ")
         print(self.activations[layer][sublayer])   
         S_tilde = sum([a*b for a,b in zip(self.basis[layer][sublayer],
@@ -737,6 +790,12 @@ class HOTS_Sparse_Net:
                                                                 sparsity_coeff, 
                                                                 noise_ratio, 
                                                                 sensitivity)
+                if method=="Dot product":
+                    error = self.sublayer_response_dot_product(layer, sublayer,
+                                                               timesurfaces[i][k],
+                                                               sparsity_coeff, 
+                                                               noise_ratio, 
+                                                               sensitivity)
                 total_surf += 1
         return error/total_surf
 
