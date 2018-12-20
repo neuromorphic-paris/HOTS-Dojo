@@ -19,8 +19,8 @@ os.environ['MKL_NUM_THREADS'] = '1'
 plt.style.use("dark_background")
 
 #activation_method = "CG"
-activation_method = "Exp distance"
-#activation_method = "Dot product"
+#activation_method = "Exp distance"
+activation_method = "Dot product"
 
 # Network settings
 # =============================================================================
@@ -38,10 +38,10 @@ basis_dimension = [[5,5],[5,5]]
 taus = [10000,15000]
 # I won't use polarity information because is not informative for the given task
 first_layer_polarities = 1
-shuffle_seed = 7
-net_seed = 25
+shuffle_seed = 12
+net_seed = 2
 
-delay_coeff = 900
+delay_coeff = 45000
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -118,15 +118,15 @@ Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polaritie
 start_time = time.time()
 
 sparsity_coeff = [1, 1, 10000]
-learning_rate = [0.02, 0.02, 10000]
-noise_ratio = [1, 0, 1000]
-sensitivity = [0.1, 0.8, 50000]
+learning_rate = [0.002, 0.00002, 50000]
+noise_ratio = [1, 0, 7000]
+sensitivity = [6, 8, 50000]
 
 Net.learn_online(dataset=dataset_learning,
                   method=activation_method, base_norm="Thresh",
                   noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
                   sensitivity=sensitivity,
-                  learning_rate=learning_rate, verbose=False)
+                  learning_rate=learning_rate, verbose=True)
 
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
@@ -175,37 +175,7 @@ sensitivity = sensitivity[1]
 #noise_ratio = 0
 #sensitivity = 0           
     
-#%% Plot Basis 
 
-#layer = 0
-#sublayer = 0
-#Net.plot_basis(layer, sublayer)
-#plt.show()       
-        
-#%% Reconstruction/Generality Test _single surface_ 
-#TODO check it, the reconstruction seems not working well
-#card_n = -1
-#surface_n = -3
-#layer = 0
-#sublayer = 0
-#
-#plt.figure("Original Surface")
-#sns.heatmap(Net.surfaces[layer][sublayer][card_n][surface_n])           
-#Net.sublayer_reconstruct(layer, sublayer, Net.surfaces[layer][sublayer][card_n][surface_n],
-#                          "Exp distance", noise_ratio, sparsity_coeff, sensitivity)
-#Net.activations[layer][sublayer]
-#plt.show()       
-
-#%% Complete batch reconstruction error for a single sublayer
-
-#layer = 0
-#sublayer = 0
-#sparsity_coeff = 0
-#timesurfaces = Net.surfaces[layer][sublayer]
-#
-#Cards_err = Net.batch_sublayer_reconstruct_error(layer, sublayer, timesurfaces,
-#                                                 "Exp distance", noise_ratio,
-#                                                 sparsity_coeff, sensitivity)
 
 #%% Classification train
 # TODO there is an error here: check it, the histograms are wrong
@@ -232,3 +202,42 @@ for i,right_label in enumerate(labels_testing):
     eucl += (test_results[1][i][0] == right_label)/len(labels_testing)
     norm_eucl += (test_results[1][i][1] == right_label)/len(labels_testing)
     bhatta += (test_results[1][i][2] == right_label)/len(labels_testing)
+
+#%% Plot Network Evolution
+
+layer = 1
+sublayer = 0    
+Net.evolution_print(layer,sublayer)
+plt.show()       
+
+#%% Plot Basis 
+
+#layer = 1
+#sublayer = 0
+#Net.plot_basis(layer, sublayer)
+#plt.show()       
+        
+#%% Reconstruction/Generality Test _single surface_ 
+#TODO check it, the reconstruction seems not working well (ofc in the online algorithm it doesn't have any meaning)
+#card_n = -1
+#surface_n = -3
+#layer = 0
+#sublayer = 0
+#
+#plt.figure("Original Surface")
+#sns.heatmap(Net.surfaces[layer][sublayer][card_n][surface_n])           
+#Net.sublayer_reconstruct(layer, sublayer, Net.surfaces[layer][sublayer][card_n][surface_n],
+#                          "Exp distance", noise_ratio, sparsity_coeff, sensitivity)
+#Net.activations[layer][sublayer]
+#plt.show()       
+
+#%% Complete batch reconstruction error for a single sublayer
+
+#layer = 0
+#sublayer = 0
+#sparsity_coeff = 0
+#timesurfaces = Net.surfaces[layer][sublayer]
+#
+#Cards_err = Net.batch_sublayer_reconstruct_error(layer, sublayer, timesurfaces,
+#                                                 "Exp distance", noise_ratio,
+#                                                 sparsity_coeff, sensitivity)

@@ -18,11 +18,11 @@ from scipy import optimize
 from scipy.spatial import distance 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from Libs.Time_Surface_generators import Time_Surface_event
+from Libs.Time_Surface_generators import Time_Surface_event,Time_Surface_all
 from Libs.HOTS_Sparse_Libs import error_func, error_func_deriv_a_j,\
 error_func_phi_full_batch, error_func_phi_grad_full_batch, update_basis_online,\
 update_basis_online_hard_treshold, update_basis_offline_CG, events_from_activations,\
-create_figures, update_figures, exp_decay
+surface_live_plot, exp_decay
 
 # Class for HOTS_Sparse_Net
 # =============================================================================
@@ -136,7 +136,7 @@ class HOTS_Sparse_Net:
     # base_norm_coeff : l2 regularization coefficient for basis (Not used if
     #                   base_norm="Thresh")
     # verbose : If verbose is on, it will display graphs to assest the ongoing,
-    #           learning algorithm
+    #           learning algorithm (Per batch)
     # =============================================================================        
     def learn_online(self, dataset, method="Exp distance", base_norm="Thresh", 
                      noise_ratio=[0,0,1], sparsity_coeff=[0,0,1], sensitivity=[0,0,1],
@@ -149,8 +149,9 @@ class HOTS_Sparse_Net:
         
         # Setting the number of polarities for the first layer 
         num_polarities = self.first_layer_polarities
-        
+        # Preallocating evolution methods, for plotting the network evolution.
         self.evolution_pre_allocation(len(dataset))
+        
         for layer in range(self.layers):
             # now let's generate the surfaces and train the layers
             single_layer_surfaces = []
@@ -177,21 +178,16 @@ class HOTS_Sparse_Net:
                 sparsity_evolution = exp_decay(sparsity_coeff[0], sparsity_coeff[1], sparsity_coeff[2], time)                
                 sensitivity_evolution = exp_decay(sensitivity[0], sensitivity[1], sensitivity[2], time)
                 
-                # Plot evolution parameters and basis if required 
+                # Generate and allocate plots for online plotting
                 if verbose is True:
-                    figures, axes = create_figures(surfaces=self.basis[layer][sublayer], num_of_plots=self.basis_number[layer])
-                    tsurface_fig, tsurface_ax = create_figures(surfaces=self.basis[layer][sublayer][0], num_of_plots=1, fig_names="Input surface")
-                    net_evolution_fig = plt.figure('Network parameters evolution, Layer: '+str(layer)+' Sublayer: '+str(sublayer))
-                    net_evolution_ax = []
-                    net_evolution_ax.append(net_evolution_fig.add_subplot(311))
-                    net_evolution_ax.append(net_evolution_fig.add_subplot(312))
-                    net_evolution_ax.append(net_evolution_fig.add_subplot(313))
-                    net_evolution_ax[0].plot(noise_evolution)
-                    net_evolution_ax[0].set_title('Activity Noise ratio')
-                    net_evolution_ax[1].plot(learning_evolution)
-                    net_evolution_ax[1].set_title('Learning step size')
-                    net_evolution_ax[2].plot(sparsity_evolution)
-                    net_evolution_ax[2].set_title('Sparsity coefficient')
+                    # Building a list to contain the basis at each run and the original timesurface (the whole picture)
+                    # at the position 0
+                    timesurfaces_list = [Time_Surface_all(xdim=35, ydim=35, timestamp=dataset[0][0][-1], timecoeff=self.taus[0], dataset=dataset[0], num_polarities=1, minv=0.1, verbose=False)]
+                    plot_names = ["Original Time Surface"]
+                    for i in range(len(self.basis[layer][sublayer])):
+                        timesurfaces_list.append(self.basis[layer][sublayer][i])
+                        plot_names.append("Base N: "+str(i))
+                    live_figures, live_axes = surface_live_plot(surfaces=timesurfaces_list, fig_names=plot_names)
                     plt.show()
                     plt.draw()
 
@@ -241,20 +237,28 @@ class HOTS_Sparse_Net:
                             update_basis_online_hard_treshold(self.basis[layer][sublayer], self.activations[layer][sublayer],
                                                               learning_evolution[time], tsurface, 1, 0)
                         
-                        
-                        # Plot updated basis at each cycle if required
-                        if verbose is True:
-                            update_figures(figures=figures, axes=axes, surfaces=self.basis[layer][sublayer])
-                            update_figures(figures=tsurface_fig, axes=tsurface_ax, surfaces=tsurface)
-                            plt.draw()
-                            plt.pause(0.0001)
                         time += 1
                     if time!=0:                        
                         self.evolution_save_point(layer, sublayer, batch, noise_evolution[time-1], sparsity_evolution[time-1], sensitivity_evolution[time-1], learning_evolution[time-1])
+                    # Update plots
+                    if verbose is True:    
+                        timesurfaces_list[0]=Time_Surface_all(xdim=35, ydim=35, timestamp=dataset[batch][0][-1], timecoeff=self.taus[0], dataset=dataset[batch], num_polarities=1, minv=0.1, verbose=False)
+                        for i in range(len(self.basis[layer][sublayer])):
+                            timesurfaces_list[i+1]=self.basis[layer][sublayer][i]
+                        live_figures, live_axes = surface_live_plot(surfaces=timesurfaces_list, figures=live_figures, axes=live_axes)
+                        plt.draw()
+                        plt.pause(0.0001)
                     sub_layer_surfaces.append(batch_surfaces)
                     sub_layer_reference_events.append(batch_reference_events)
                     print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
-
+                # Close plots before displaying next set of basis
+                if verbose is True:
+                    for i in range(len(live_figures)):
+                        plt.close(fig=live_figures[i])
+                    live_axes.clear()
+                    live_figures.clear()
+                        
+                    
                 # Check if we are at the last layer or we need to recompute the activations
                 # to train the next layer
                 if layer+1 != self.layers:
@@ -280,6 +284,12 @@ class HOTS_Sparse_Net:
                                                                     sparsity_evolution[time], 
                                                                     noise_evolution[time], 
                                                                     sensitivity_evolution[time])
+                            if method=="Dot product":
+                                sub_layer_errors.append(self.sublayer_response_dot_product(layer, sublayer,
+                                                                                           sub_layer_surfaces[batch][k],
+                                                                                           sparsity_evolution[time], 
+                                                                                           noise_evolution[time], 
+                                                                                           sensitivity_evolution[time]))
                             batch_activations.append(self.activations[layer][sublayer].copy())
 
                         # Obtaining the events resulting from the activations in a single batch
@@ -357,10 +367,6 @@ class HOTS_Sparse_Net:
                 # for a single sublayer used for full batch learning 
                 all_surfaces = []
                 all_reference_events = []
-                # Plot basis if required 
-                if verbose is True:
-                    figures, axes = create_figures(surfaces=self.basis[layer][sublayer],
-                                                   num_of_plots=self.basis_number[layer])
                 for batch in range(len(batches[sublayer])):
                     batch_surfaces = []
                     for k in range(len(batches[sublayer][batch][0])):
@@ -399,11 +405,6 @@ class HOTS_Sparse_Net:
                     self.basis[layer][sublayer] = opt_res.x.reshape(self.basis_number[layer],
                               self.basis_dimensions[layer][1], self.basis_dimensions[layer][0]*num_polarities)
                     sub_layer_errors.append(opt_res.fun)
-                    # Plot updated basis at each cycle if required
-                    if verbose is True:
-                        update_figures(figures=figures, axes=axes, surfaces=self.basis[layer][sublayer])
-                        plt.draw()
-                        plt.pause(0.0001)
                     n_steps += 1
                     previous_err = err
                     err = sub_layer_errors[-1]
@@ -455,9 +456,9 @@ class HOTS_Sparse_Net:
             for sublayer in range(2**layer):
                 self.basis_history[layer][sublayer][0]=self.basis[layer][sublayer]
         self.noise_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
-        self.sparsity_history=self.noise_history.copy()
-        self.sensitivity_history=self.noise_history.copy()
-        self.learning_history=self.noise_history.copy()
+        self.sparsity_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.sensitivity_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.learning_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
         self.basis_distance=[[[np.zeros(len(self.basis[layer][sublayer])) for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
         
                 
@@ -466,7 +467,6 @@ class HOTS_Sparse_Net:
     # online method is overfitting in a particular batch.
     # In the future the outlook of the online method will be to implement overparameters
     # to control the network in a fine and less supervised manner.
-    # Thus this method won't be needed anymore
     # =============================================================================
     # layer : the index of the selected layer 
     # sublayer : the index of the selected sublayer 
@@ -479,7 +479,7 @@ class HOTS_Sparse_Net:
     # It saves the set of basis, and the status of the evolution parameters.
     # =============================================================================  
     def evolution_save_point(self, layer, sublayer, batch, noise, sparsity, sensitivity, learning):
-        self.basis_history[layer][sublayer][batch+1]=self.basis[layer][sublayer]
+        self.basis_history[layer][sublayer][batch+1]=self.basis[layer][sublayer].copy()
         self.noise_history[layer][sublayer][batch]=noise
         self.sparsity_history[layer][sublayer][batch]=sparsity
         self.sensitivity_history[layer][sublayer][batch]=sensitivity
@@ -489,8 +489,53 @@ class HOTS_Sparse_Net:
             distance[i] = np.sum(self.basis_history[layer][sublayer][batch][i,:,:]-feature)**2
         self.basis_distance[layer][sublayer][batch]=distance
                 
-        
-        
+    # Method for printing the evolution of the network after online learning   
+    # =============================================================================
+    # layer : the index of the selected layer 
+    # sublayer : the index of the selected sublayer 
+    # figures : is figure is empty, the function will generate a new set of them,
+    #           otherwise the new axes will be printed on the old ones to update them
+    # axes : the axes of the previous figures, if not provided the function will generate
+    #        a new set of them
+    # 
+    # It returns the figure lists for updating the graphs if needed
+    # =============================================================================  
+    def evolution_print(self, layer, sublayer, figures=[], axes=[]):
+        if figures==[]:
+            figures.append(plt.figure("Basis evolution per batch (euclidean distance between sets of basis)"))
+            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]
+            axes.append(figures[0].add_subplot('111'))
+            axes[0].plot(self.basis_distance[layer][sublayer])
+            axes[0].legend(tuple(distance_legend))
+            axes[0].set_xlabel("Batch Number")
+            
+            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
+                                           self.learning_history[layer][sublayer],
+                                           self.sparsity_history[layer][sublayer],
+                                           self.sensitivity_history[layer][sublayer]]).transpose()
+            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
+            figures.append(plt.figure("Network parameter evolution per batch"))
+            axes.append(figures[1].add_subplot('111'))
+            axes[1].plot(evolution_parameters)
+            axes[1].legend(tuple(evolution_legend))
+            axes[1].set_xlabel("Batch Number")
+        else:
+            axes[0].clear()
+            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]                  
+            axes[0].plot(self.basis_distance[layer][sublayer])
+            axes[0].legend(tuple(distance_legend))
+            axes[0].set_xlabel("Batch Number")
+            
+            axes[1].clear()
+            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
+                                           self.learning_history[layer][sublayer],
+                                           self.sparsity_history[layer][sublayer],
+                                           self.sensitivity_history[layer][sublayer]]).transpose()
+            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
+            axes[1].plot(evolution_parameters)
+            axes[1].legend(tuple(evolution_legend))
+            axes[1].set_xlabel("Batch Number")
+        return figures, axes
     # Method for computing and updating the network activations for a single time surface
     # using conjugate gradient descent
     # =============================================================================
@@ -828,7 +873,7 @@ class HOTS_Sparse_Net:
     # =============================================================================      
     def histogram_classification_train(self, dataset, labels, number_of_labels,
                                        method, noise_ratio, sparsity_coeff,
-                                         sensitivity):
+                                         sensitivity, verbose=):
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,

@@ -186,34 +186,31 @@ def events_from_activations(activations, events, delay_coeff):
     return on_events, off_events
 
 
-
-# Handy functions used to plot online graphs at each base update if verbose=True             
-def create_figures(surfaces, num_of_plots, fig_names="Base N : "):
-    figures = []
-    axes = []
-    # I am plotting several network basis with generated figure names
-    if fig_names=="Base N : ":
-        for i in range(num_of_plots):
-            fig = plt.figure(fig_names+str(i))
-            ax = sns.heatmap(surfaces[i], annot=False, cbar=False, vmin=0, vmax=1)
+# Method for live printing the current set of basis during learning   
+# =============================================================================
+# surfaces : A list of surfaces to print
+# figures : if the axes are empty, the function will generate a new set of them
+#           along the axes.
+# axes : if provided, the function will update them with the new set of
+#        timesurfaces
+# fig_names : A list containing the names of the figures, only used if 
+#             and mandatory, if the function is generating a new set of ones
+#
+# It returns the figure and the axes lists for updating the plots if needed
+# =============================================================================             
+def surface_live_plot(surfaces, figures=[], axes=[], fig_names=[]):
+    if axes==[]:
+        for surf in range(len(surfaces)):
+            fig = plt.figure(fig_names[surf])
+            ax = sns.heatmap(surfaces[surf], annot=False, cbar=False, vmin=0, vmax=1)
             figures.append(fig)
             axes.append(ax)
-    # I am plotting a single general tsurface 
     else:
-        fig = plt.figure(fig_names)
-        ax = sns.heatmap(surfaces, annot=False, cbar=False, vmin=0, vmax=1)
-        figures.append(fig)
-        axes.append(ax)
+        for surf in range(len(surfaces)):
+            axes[surf].clear()
+            sns.heatmap(data=surfaces[surf], ax=axes[surf], annot=False, cbar=False, vmin=0, vmax=1)
     return figures, axes
 
-def update_figures(figures, axes, surfaces):
-    if len(figures) is 1:
-        axes[0].clear()
-        sns.heatmap(data=surfaces, ax=axes[0], annot=False, cbar=False, vmin=0, vmax=1)
-    else:
-        for i in range(len(figures)):
-            axes[i].clear()
-            sns.heatmap(data=surfaces[i], ax=axes[i], annot=False, cbar=False, vmin=0, vmax=1)
 
 # Function to compute and exponential decay
 # =============================================================================
