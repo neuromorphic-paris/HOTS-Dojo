@@ -17,6 +17,7 @@ import numpy as np
 from scipy import optimize
 from scipy.spatial import distance 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import seaborn as sns
 from Libs.Time_Surface_generators import Time_Surface_event,Time_Surface_all
 from Libs.HOTS_Sparse_Libs import error_func, error_func_deriv_a_j,\
@@ -489,53 +490,7 @@ class HOTS_Sparse_Net:
             distance[i] = np.sum(self.basis_history[layer][sublayer][batch][i,:,:]-feature)**2
         self.basis_distance[layer][sublayer][batch]=distance
                 
-    # Method for printing the evolution of the network after online learning   
-    # =============================================================================
-    # layer : the index of the selected layer 
-    # sublayer : the index of the selected sublayer 
-    # figures : is figure is empty, the function will generate a new set of them,
-    #           otherwise the new axes will be printed on the old ones to update them
-    # axes : the axes of the previous figures, if not provided the function will generate
-    #        a new set of them
-    # 
-    # It returns the figure lists for updating the graphs if needed
-    # =============================================================================  
-    def evolution_print(self, layer, sublayer, figures=[], axes=[]):
-        if figures==[]:
-            figures.append(plt.figure("Basis evolution per batch (euclidean distance between sets of basis)"))
-            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]
-            axes.append(figures[0].add_subplot('111'))
-            axes[0].plot(self.basis_distance[layer][sublayer])
-            axes[0].legend(tuple(distance_legend))
-            axes[0].set_xlabel("Batch Number")
-            
-            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
-                                           self.learning_history[layer][sublayer],
-                                           self.sparsity_history[layer][sublayer],
-                                           self.sensitivity_history[layer][sublayer]]).transpose()
-            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
-            figures.append(plt.figure("Network parameter evolution per batch"))
-            axes.append(figures[1].add_subplot('111'))
-            axes[1].plot(evolution_parameters)
-            axes[1].legend(tuple(evolution_legend))
-            axes[1].set_xlabel("Batch Number")
-        else:
-            axes[0].clear()
-            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]                  
-            axes[0].plot(self.basis_distance[layer][sublayer])
-            axes[0].legend(tuple(distance_legend))
-            axes[0].set_xlabel("Batch Number")
-            
-            axes[1].clear()
-            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
-                                           self.learning_history[layer][sublayer],
-                                           self.sparsity_history[layer][sublayer],
-                                           self.sensitivity_history[layer][sublayer]]).transpose()
-            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
-            axes[1].plot(evolution_parameters)
-            axes[1].legend(tuple(evolution_legend))
-            axes[1].set_xlabel("Batch Number")
-        return figures, axes
+
     # Method for computing and updating the network activations for a single time surface
     # using conjugate gradient descent
     # =============================================================================
@@ -873,7 +828,7 @@ class HOTS_Sparse_Net:
     # =============================================================================      
     def histogram_classification_train(self, dataset, labels, number_of_labels,
                                        method, noise_ratio, sparsity_coeff,
-                                         sensitivity, verbose=):
+                                         sensitivity):
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,
@@ -904,7 +859,9 @@ class HOTS_Sparse_Net:
             histograms[label] = histograms[label]/batch_per_label[label]
         self.histograms = histograms
         self.normalized_histograms = normalized_histograms
-        print("Training ended, you can now look at the histograms with in the attribute .histograms and .normalized_histograms")
+        print("Training ended, you can now look at the histograms with in the "+
+              "attribute .histograms and .normalized_histograms, or using "+
+              "the .plot_histograms method")
 
     # Method for testing the histogram classification model as proposed in 
     # HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
@@ -973,8 +930,57 @@ class HOTS_Sparse_Net:
             single_batch_predicted_labels = np.argmin(single_batch_distances, 0)
             distances.append(single_batch_distances)
             predicted_labels.append(single_batch_predicted_labels)
-        
-        return distances, predicted_labels, histograms, normalized_histograms
+        self.test_histograms = histograms
+        self.test_normalized_histograms = normalized_histograms    
+        # Computing the results
+        eucl = 0
+        norm_eucl = 0
+        bhatta = 0
+        for i,true_label in enumerate(labels):
+            eucl += (predicted_labels[i][0] == true_label)/len(labels)
+            norm_eucl += (predicted_labels[i][1] == true_label)/len(labels)
+            bhatta += (predicted_labels[i][2] == true_label)/len(labels)
+        prediction_rates = [eucl, norm_eucl, bhatta]
+        print("Testing ended, you can also look at the test histograms with in"+
+              " the attribute .test_histograms and .test_normalized_histograms, "+
+              "or using the .plot_histograms method")
+        return prediction_rates, distances, predicted_labels
+
+    # Method for plotting the histograms of the network, either result of train 
+    # or testing
+    # =============================================================================
+    # label_names : tuple containing the names of each label that will displayed
+    #               in the legend
+    # labels : list containing the labels of the test dataset used to generate
+    #          the histograms, if empty, the function will plot the class histograms
+    #          computed using .histogram_classification_train
+    # =============================================================================
+    def plot_histograms(self, label_names, labels=[]):
+        if labels == []:
+            hist = np.transpose(self.histograms)
+            norm_hist = np.transpose(self.normalized_histograms)
+            eucl_fig, eucl_ax = plt.subplots()
+            eucl_ax.set_title("Train histogram based on euclidean distance")
+            eucl_ax.plot(hist)
+            eucl_ax.legend(label_names)
+
+            norm_fig, norm_ax = plt.subplots()
+            norm_ax.set_title("Train histogram based on normalized euclidean distance")
+            norm_ax.plot(norm_hist)
+            norm_ax.legend(label_names)
+        else:
+            eucl_fig, eucl_ax = plt.subplots()
+            eucl_ax.set_title("Test histogram based on euclidean distance")
+            
+            norm_fig, norm_ax = plt.subplots()
+            norm_ax.set_title("Test histogram based on normalized euclidean distance")
+            custom_lines = [Line2D([0], [0], color="C"+str(label), lw=1) for label in range(len(label_names))]
+            for batch in range(len(labels)):
+                eucl_ax.plot(self.test_histograms[batch].transpose(),"C"+str(labels[batch]))
+                norm_ax.plot(self.test_normalized_histograms[batch].transpose(),"C"+str(labels[batch]))
+            
+            eucl_ax.legend(custom_lines,label_names)
+            norm_ax.legend(custom_lines,label_names)
 
     
     # Method for plotting the basis set of a single sublayer
@@ -986,3 +992,52 @@ class HOTS_Sparse_Net:
         for i in range(self.basis_number[layer]):
             plt.figure("Base N: "+str(i))
             sns.heatmap(self.basis[layer][sublayer][i])
+            
+                # Method for printing the evolution of the network after online learning   
+    # =============================================================================
+    # layer : the index of the selected layer 
+    # sublayer : the index of the selected sublayer 
+    # figures : is figure is empty, the function will generate a new set of them,
+    #           otherwise the new axes will be printed on the old ones to update them
+    # axes : the axes of the previous figures, if not provided the function will generate
+    #        a new set of them
+    # 
+    # It returns the figure lists for updating the graphs if needed
+    # =============================================================================  
+    def plot_evolution(self, layer, sublayer, figures=[], axes=[]):
+        if figures==[]:
+            figures.append(plt.figure("Basis evolution per batch (euclidean distance between sets of basis)"))
+            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]
+            axes.append(figures[0].add_subplot('111'))
+            axes[0].plot(self.basis_distance[layer][sublayer])
+            axes[0].legend(tuple(distance_legend))
+            axes[0].set_xlabel("Batch Number")
+            
+            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
+                                           self.learning_history[layer][sublayer],
+                                           self.sparsity_history[layer][sublayer],
+                                           self.sensitivity_history[layer][sublayer]]).transpose()
+            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
+            figures.append(plt.figure("Network parameter evolution per batch"))
+            axes.append(figures[1].add_subplot('111'))
+            axes[1].plot(evolution_parameters)
+            axes[1].legend(tuple(evolution_legend))
+            axes[1].set_xlabel("Batch Number")
+        else:
+            
+            axes[0].clear()
+            distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]                  
+            axes[0].plot(self.basis_distance[layer][sublayer])
+            axes[0].legend(tuple(distance_legend))
+            axes[0].set_xlabel("Batch Number")
+            
+            axes[1].clear()
+            evolution_parameters=np.array([self.noise_history[layer][sublayer], 
+                                           self.learning_history[layer][sublayer],
+                                           self.sparsity_history[layer][sublayer],
+                                           self.sensitivity_history[layer][sublayer]]).transpose()
+            evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
+            axes[1].plot(evolution_parameters)
+            axes[1].legend(tuple(evolution_legend))
+            axes[1].set_xlabel("Batch Number")
+        return figures, axes

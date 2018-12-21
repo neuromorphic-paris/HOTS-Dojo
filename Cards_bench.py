@@ -19,8 +19,8 @@ os.environ['MKL_NUM_THREADS'] = '1'
 plt.style.use("dark_background")
 
 #activation_method = "CG"
-#activation_method = "Exp distance"
-activation_method = "Dot product"
+activation_method = "Exp distance"
+#activation_method = "Dot product"
 
 # Network settings
 # =============================================================================
@@ -33,15 +33,15 @@ activation_method = "Dot product"
 # 
 # =============================================================================
 
-basis_number = [3,6]
-basis_dimension = [[5,5],[5,5]]
-taus = [10000,15000]
+basis_number = [8]
+basis_dimension = [[11,11]]
+taus = [10000,15000,20000]
 # I won't use polarity information because is not informative for the given task
 first_layer_polarities = 1
 shuffle_seed = 12
 net_seed = 2
 
-delay_coeff = 45000
+delay_coeff = 0
        
 # Preparing the card dataset 
 card_sets = ["cl_","di_","he_", "sp_"]
@@ -117,9 +117,9 @@ Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polaritie
 
 start_time = time.time()
 
-sparsity_coeff = [1, 1, 10000]
-learning_rate = [0.002, 0.00002, 50000]
-noise_ratio = [1, 0, 7000]
+sparsity_coeff = [0.7, 0.7, 10000]
+learning_rate = [0.0008, 0.0008, 50000]
+noise_ratio = [1, 0, 20000]
 sensitivity = [6, 8, 50000]
 
 Net.learn_online(dataset=dataset_learning,
@@ -136,28 +136,7 @@ sparsity_coeff = sparsity_coeff[1]
 learning_rate = learning_rate[1]
 noise_ratio = noise_ratio[1]
 sensitivity = sensitivity[1]
-#%% Learning-online-CG and Thresh
 
-#start_time = time.time()
-#
-#sparsity_coeff = [0.8, 0.8, 1]
-#learning_rate = [0.18, 0.18, 1]
-#noise_ratio = [0, 0, 50]
-#base_norm_coeff = 0.0005
-#
-#Net.learn_online(dataset=dataset_learning,
-#                  method="CG", base_norm="Thresh",
-#                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
-#                  learning_rate=learning_rate, verbose=False)
-#
-#elapsed_time = time.time()-start_time
-#print("Learning elapsed time : "+str(elapsed_time))
-#
-## Taking the steady state values to perform the other tests
-#sparsity_coeff = sparsity_coeff[1]
-#learning_rate = learning_rate[1]
-#noise_ratio = noise_ratio[1]
-#sensitivity = 0
 #%% Learning offline full batch
 
 #start_time = time.time()
@@ -178,44 +157,42 @@ sensitivity = sensitivity[1]
 
 
 #%% Classification train
-# TODO there is an error here: check it, the histograms are wrong
-Net.histogram_classification_train(dataset_learning, labels_learning, 
+
+Net.histogram_classification_train(dataset_learning, labels_learning,   
                                    number_of_labels, activation_method, noise_ratio,
                                    sparsity_coeff, sensitivity)
-
-
+# Plotting results
+legend = ("clubs","diamonds","heart", "spades")
+Net.plot_histograms(legend)
+plt.show()       
 
 #%% Classification test 
 
-test_results = Net.histogram_classification_test(dataset_testing, labels_testing,
-                                                 number_of_labels, activation_method,
-                                                 noise_ratio, sparsity_coeff, sensitivity)
-hist = np.transpose(Net.histograms)
-norm_hist = np.transpose(Net.normalized_histograms)
-test_hist = np.transpose(test_results[2])
-test_norm_hist = np.transpose(test_results[3])
+test_results, distances, predicted_labels = Net.histogram_classification_test(dataset_testing, labels_testing,
+                                                                              number_of_labels, activation_method,
+                                                                              noise_ratio, sparsity_coeff, sensitivity)
 
-eucl = 0
-norm_eucl = 0
-bhatta = 0
-for i,right_label in enumerate(labels_testing):
-    eucl += (test_results[1][i][0] == right_label)/len(labels_testing)
-    norm_eucl += (test_results[1][i][1] == right_label)/len(labels_testing)
-    bhatta += (test_results[1][i][2] == right_label)/len(labels_testing)
+# Plotting results
+print("Euclidean distance recognition rate :             "+str(test_results[0]))
+print("Normalsed euclidean distance recognition rate :   "+str(test_results[1]))
+print("Bhattachaya distance recognition rate :           "+str(test_results[2]))
+
+Net.plot_histograms(legend, labels=labels_testing)
+plt.show()       
 
 #%% Plot Network Evolution
 
-layer = 1
-sublayer = 0    
-Net.evolution_print(layer,sublayer)
-plt.show()       
+#layer = 0
+#sublayer = 0    
+#Net.plot_evolution(layer,sublayer)
+#plt.show()       
 
 #%% Plot Basis 
 
-#layer = 1
-#sublayer = 0
-#Net.plot_basis(layer, sublayer)
-#plt.show()       
+layer = 1
+sublayer = 0
+Net.plot_basis(layer, sublayer)
+plt.show()       
         
 #%% Reconstruction/Generality Test _single surface_ 
 #TODO check it, the reconstruction seems not working well (ofc in the online algorithm it doesn't have any meaning)
