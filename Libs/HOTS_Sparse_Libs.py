@@ -191,24 +191,30 @@ def events_from_activations(activations, events, delay_coeff):
 # surfaces : A list of surfaces to print
 # figures : if the axes are empty, the function will generate a new set of them
 #           along the axes.
-# axes : if provided, the function will update them with the new set of
+# axes : if provided, the function will update them with the updated set of
+#        images
+# images : if provided, the function will update them with the new set of
 #        timesurfaces
 # fig_names : A list containing the names of the figures, only used if 
 #             and mandatory, if the function is generating a new set of ones
 #
 # It returns the figure and the axes lists for updating the plots if needed
 # =============================================================================             
-def surface_live_plot(surfaces, figures=[], axes=[], fig_names=[]):
+def surface_live_plot(surfaces, figures=[], axes=[], images=[], fig_names=[]):
     if axes==[]:
         for surf in range(len(surfaces)):
             fig = plt.figure(fig_names[surf])
-            ax = sns.heatmap(surfaces[surf], annot=False, cbar=False, vmin=0, vmax=1)
+            ax = fig.add_subplot(111)
+            image = ax.imshow(surfaces[surf])
             figures.append(fig)
             axes.append(ax)
+            images.append(image)
+        plt.pause(0.0001)
     else:
         for surf in range(len(surfaces)):
-            axes[surf].clear()
-            sns.heatmap(data=surfaces[surf], ax=axes[surf], annot=False, cbar=False, vmin=0, vmax=1)
+            images[surf].set_array(surfaces[surf])
+            figures[surf].canvas.draw()
+        plt.pause(0.0001)
     return figures, axes
 
 

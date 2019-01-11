@@ -189,8 +189,7 @@ class HOTS_Sparse_Net:
                         timesurfaces_list.append(self.basis[layer][sublayer][i])
                         plot_names.append("Base N: "+str(i))
                     live_figures, live_axes = surface_live_plot(surfaces=timesurfaces_list, fig_names=plot_names)
-                    plt.show()
-                    plt.draw()
+
 
                     
                 # Counter of surfaces that will be used to update evolution parameters
@@ -247,11 +246,9 @@ class HOTS_Sparse_Net:
                         for i in range(len(self.basis[layer][sublayer])):
                             timesurfaces_list[i+1]=self.basis[layer][sublayer][i]
                         live_figures, live_axes = surface_live_plot(surfaces=timesurfaces_list, figures=live_figures, axes=live_axes)
-                        plt.draw()
-                        plt.pause(0.0001)
+                        print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
                     sub_layer_surfaces.append(batch_surfaces)
                     sub_layer_reference_events.append(batch_reference_events)
-                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process per batch:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
                 # Close plots before displaying next set of basis
                 if verbose is True:
                     for i in range(len(live_figures)):
@@ -368,6 +365,13 @@ class HOTS_Sparse_Net:
                 # for a single sublayer used for full batch learning 
                 all_surfaces = []
                 all_reference_events = []
+                # Generate and allocate plots for online plotting
+                if verbose is True:
+                    plot_names = []
+                    # Building a list to contain the basis at each run
+                    for i in range(len(self.basis[layer][sublayer])):
+                        plot_names.append("Base N: "+str(i))
+                    live_figures, live_axes = surface_live_plot(surfaces=self.basis[layer][sublayer], fig_names=plot_names)
                 for batch in range(len(batches[sublayer])):
                     batch_surfaces = []
                     for k in range(len(batches[sublayer][batch][0])):
@@ -409,7 +413,10 @@ class HOTS_Sparse_Net:
                     n_steps += 1
                     previous_err = err
                     err = sub_layer_errors[-1]
-                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process:"+np.str((n_steps/max_steps)*100)+"%")
+                    # Update plots
+                    if verbose is True:    
+                        live_figures, live_axes = surface_live_plot(surfaces=self.basis[layer][sublayer], figures=live_figures, axes=live_axes)
+                        print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Base optimization process:"+np.str((n_steps/max_steps)*100)+"%")
                 if (n_steps<max_steps):
                     print("Execution stopped, requested precision reached")
                 else:
@@ -441,6 +448,12 @@ class HOTS_Sparse_Net:
                 # sublayers in the next layer
                 outbatches.append(sub_layer_outevents_on)       
                 outbatches.append(sub_layer_outevents_off)
+                # Close plots before displaying next set of basis
+                if verbose is True:
+                    for i in range(len(live_figures)):
+                        plt.close(fig=live_figures[i])
+                    live_axes.clear()
+                    live_figures.clear()
             batches = outbatches.copy()
             self.surfaces.append(single_layer_surfaces)
             self.errors.append(single_layer_errors)
@@ -542,11 +555,12 @@ class HOTS_Sparse_Net:
         activations = activations*(1-noise_coeff) + (noise_coeff)*np.exp(-np.random.rand(len(activations)))
         # Here I implement the lateral inhibition
         winner_ind=np.argmax(activations)
-        losers_ind= np.arange(len(activations))!=winner_ind
+        losers_ind=np.arange(len(activations))!=winner_ind
         activations[losers_ind] = activations[losers_ind]-sparsity_coeff*activations[winner_ind]
         # I kill the basis too inhibited (with negative values) and update the activities
         activations[activations<=0] = 0
         self.activations[layer][sublayer] = activations
+#        print(activations)
         # Here i compute the error as the euclidean distance between a reconstruced
         # Time surface and the original one
         S_tilde = sum([a*b for a,b in zip(self.basis[layer][sublayer], activations)])
@@ -584,6 +598,7 @@ class HOTS_Sparse_Net:
         # I kill the basis too inhibited (with negative values) and update the activities
         activations[activations<=0] = 0
         self.activations[layer][sublayer] = activations
+#        print(activations)
         # Here i compute the error as the euclidean distance between a reconstruced
         # Time surface and the original one
         S_tilde = sum([a*b for a,b in zip(self.basis[layer][sublayer], activations)])
@@ -613,11 +628,14 @@ class HOTS_Sparse_Net:
     #               a base and the upcoming timesurface, this coefficient it's
     #               the gaussian 'variance' and it modulates cell selectivity
     #               to their encoded feature (Feature present only on Exp distance)   
-    #            
+    # 
+    # verbose : If set to True the function will provide written feedback on the 
+    #           percentage of the dataset computed
+    #              
     # It returns the whole history of the network activity
     # =============================================================================  
     def full_net_dataset_response(self, dataset, method="Exp distance", noise_ratio=0, sparsity_coeff=0,
-                     sensitivity=0):
+                     sensitivity=0, verbose=False):
         # The list of all data batches devided for sublayer 
         # batches[sublayer][actual_batch][events, timestamp if 0 or xy coordinates if 1]
         batches = []
@@ -677,7 +695,8 @@ class HOTS_Sparse_Net:
                     sub_layer_outevents_on.append(outevents[0])
                     sub_layer_outevents_off.append(outevents[1])
                     sub_layer_activations.append(batch_activations)
-                    print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Batch processing:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
+                    if verbose is True:
+                        print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Batch processing:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
                 layer_activations.append(sub_layer_activations)
                 outbatches.append(sub_layer_outevents_on)       
                 outbatches.append(sub_layer_outevents_off)
@@ -824,15 +843,17 @@ class HOTS_Sparse_Net:
     #               a base and the upcoming timesurface, this coefficient it's
     #               the gaussian 'variance' and it modulates cell selectivity
     #               to their encoded feature (Feature present only on Exp distance)   
-    #  
+    # verbose : If set to True the function will provide written feedback on the 
+    #                percentage of the dataset computed  
     # =============================================================================      
     def histogram_classification_train(self, dataset, labels, number_of_labels,
                                        method, noise_ratio, sparsity_coeff,
-                                         sensitivity):
+                                         sensitivity, verbose=False):
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,
-                                                      sensitivity)
+                                                      sensitivity,
+                                                      verbose)
         
         
         last_layer_activity = net_activity[-1]        
@@ -859,9 +880,10 @@ class HOTS_Sparse_Net:
             histograms[label] = histograms[label]/batch_per_label[label]
         self.histograms = histograms
         self.normalized_histograms = normalized_histograms
-        print("Training ended, you can now look at the histograms with in the "+
-              "attribute .histograms and .normalized_histograms, or using "+
-              "the .plot_histograms method")
+        if verbose is True:
+            print("Training ended, you can now look at the histograms with in the "+
+                  "attribute .histograms and .normalized_histograms, or using "+
+                  "the .plot_histograms method")
 
     # Method for testing the histogram classification model as proposed in 
     # HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
@@ -887,17 +909,19 @@ class HOTS_Sparse_Net:
     #               a base and the upcoming timesurface, this coefficient it's
     #               the gaussian 'variance' and it modulates cell selectivity
     #               to their encoded feature (Feature present only on Exp distance)   
-    # 
+    # verbose : If set to True the function will provide written feedback on the 
+    #           percentage of the dataset computed
     # It returns the computed distances per batch (Euclidean, normalized Euclidean
     # and Bhattacharyyan) and the predicted_labels per batch and per metric(distance)
     # =============================================================================      
     def histogram_classification_test(self, dataset, labels, number_of_labels, 
                                       method, noise_ratio, sparsity_coeff,
-                                         sensitivity):
+                                         sensitivity, verbose=False):
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,
-                                                      sensitivity)
+                                                      sensitivity,
+                                                      verbose)
         last_layer_activity = net_activity[-1]
         histograms = []
         normalized_histograms = []
@@ -941,9 +965,10 @@ class HOTS_Sparse_Net:
             norm_eucl += (predicted_labels[i][1] == true_label)/len(labels)
             bhatta += (predicted_labels[i][2] == true_label)/len(labels)
         prediction_rates = [eucl, norm_eucl, bhatta]
-        print("Testing ended, you can also look at the test histograms with in"+
-              " the attribute .test_histograms and .test_normalized_histograms, "+
-              "or using the .plot_histograms method")
+        if verbose is True:
+            print("Testing ended, you can also look at the test histograms with in"+
+                  " the attribute .test_histograms and .test_normalized_histograms, "+
+                  "or using the .plot_histograms method")
         return prediction_rates, distances, predicted_labels
 
     # Method for plotting the histograms of the network, either result of train 
