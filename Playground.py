@@ -1,9 +1,17 @@
+"""
+@author: marcorax
+
+This script can be used to test and save different parameters for
+the different iterations of HOTS networks
+ 
+"""
 import matplotlib.pyplot as plt
 import seaborn as sns
 import time
+import datetime
 import os
 import pickle
-from Libs.HOTS_Sparse_Network import HOTS_Sparse_Net
+from Libs.Original_HOTS.HOTS_Sparse_Network import HOTS_Sparse_Net
 from Libs.Cards_loader import Cards_loader
 
 # To avoid MKL inefficient multythreading
@@ -121,52 +129,32 @@ Net.learn_offline(dataset_learning, sparsity_coeff, learning_rate, max_steps, ba
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
 
-#%% Classification train
 
-if learning_method=="learn_online": # The parameters are evolving
-    # Taking the steady state values to perform classification
-    sparsity_coeff_hist = sparsity_coeff[1]
-    noise_ratio_hist = 0
-    sensitivity_hist = sensitivity[1]
 
-if learning_method=="learn_offline": # The parameters are fixed
-    # Taking the steady state values to perform classification
-    sparsity_coeff_hist = sparsity_coeff
-    noise_ratio_hist = 0
-    sensitivity_hist = 0
-    
+#%% Mlp classifier training
+#TODO this method is pretty much copy pasted by Var_HOTS, fix it and make Original_HOTS better
 number_of_labels=len(legend)
-Net.histogram_classification_train(dataset_learning, labels_learning,   
-                                   number_of_labels, activation_method, noise_ratio_hist,
-                                   sparsity_coeff_hist, sensitivity_hist, verbose=True)
-# Plotting results
-Net.plot_histograms(legend)
-plt.show()       
+mlp_learning_rate = 0.01
+Net.mlp_classification_train(labels_learning,   
+                                   number_of_labels, mlp_learning_rate, dataset_learning)
 
-#%% Classification test 
-test_results, distances, predicted_labels = Net.histogram_classification_test(dataset_testing, labels_testing,
-                                                                              number_of_labels, activation_method,
-                                                                              noise_ratio_hist, sparsity_coeff_hist,
-                                                                              sensitivity_hist, verbose=True)
+#%% Mlp classifier testing
 
-# Plotting results
-print("Euclidean distance recognition rate :             "+str(test_results[0]))
-print("Normalsed euclidean distance recognition rate :   "+str(test_results[1]))
-print("Bhattachaya distance recognition rate :           "+str(test_results[2]))
-
-Net.plot_histograms(legend, labels=labels_testing)
-plt.show()       
+prediction_rate, predicted_labels, predicted_labels_ev = Net.mlp_classification_test(labels_testing, number_of_labels, dataset_testing)
+print('Prediction rate is '+str(prediction_rate*100)+'%')    
 
 #%% Save network parameters
+now=datetime.datetime.now()
+
 if learning_method=="learn_online":
     if activation_method == "Exp distance":
-        file_name = "My_HOTS.pkl"
+        file_name = "My_HOTS_"+str(now).replace(" ","_")+".pkl"
     if activation_method == "Dot product":
-        file_name = "Original_HOTS.pkl"
+        file_name = "Original_HOTS_"+str(now).replace(" ","_")+".pkl"
     additional_save = []    
 
 if learning_method=="learn_offline":
-    file_name = "Compressive_HOTS.pkl"
+    file_name = "Compressive_HOTS_"+str(now).replace(" ","_")+".pkl"
     # Additional parameter to save
     additional_save = [max_steps,base_norm_coeff,precision]    
     sensitivity = 0
@@ -214,3 +202,39 @@ timesurfaces = Net.surfaces[layer][sublayer]
 Cards_err = Net.batch_sublayer_reconstruct_error(layer, sublayer, timesurfaces,
                                                  "Exp distance", noise_ratio,
                                                  sparsity_coeff, sensitivity)
+
+#%% Classification train
+
+#if learning_method=="learn_online": # The parameters are evolving
+#    # Taking the steady state values to perform classification
+#    sparsity_coeff_hist = sparsity_coeff[1]
+#    noise_ratio_hist = 0
+#    sensitivity_hist = sensitivity[1]
+#
+#if learning_method=="learn_offline": # The parameters are fixed
+#    # Taking the steady state values to perform classification
+#    sparsity_coeff_hist = sparsity_coeff
+#    noise_ratio_hist = 0
+#    sensitivity_hist = 0
+#    
+#number_of_labels=len(legend)
+#Net.histogram_classification_train(dataset_learning, labels_learning,   
+#                                   number_of_labels, activation_method, noise_ratio_hist,
+#                                   sparsity_coeff_hist, sensitivity_hist, verbose=True)
+## Plotting results
+#Net.plot_histograms(legend)
+#plt.show()       
+
+#%% Classification test 
+#test_results, distances, predicted_labels = Net.histogram_classification_test(dataset_testing, labels_testing,
+#                                                                              number_of_labels, activation_method,
+#                                                                              noise_ratio_hist, sparsity_coeff_hist,
+#                                                                              sensitivity_hist, verbose=True)
+#
+## Plotting results
+#print("Euclidean distance recognition rate :             "+str(test_results[0]))
+#print("Normalsed euclidean distance recognition rate :   "+str(test_results[1]))
+#print("Bhattachaya distance recognition rate :           "+str(test_results[2]))
+#
+#Net.plot_histograms(legend, labels=labels_testing)
+#plt.show()   

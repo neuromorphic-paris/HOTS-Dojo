@@ -1,6 +1,6 @@
 import pickle
 import numpy as np
-from Libs.HOTS_Sparse_Network import HOTS_Sparse_Net
+from Libs.Original_HOTS.HOTS_Sparse_Network import HOTS_Sparse_Net
 
 def param_load(file_name):
     with open(file_name, 'rb') as f:

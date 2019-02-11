@@ -14,6 +14,12 @@ to the original Sparse Hots paper and the new one by myself
 The links:
  
 """
+
+from keras.layers import Dense
+from keras.models import Sequential
+from keras import optimizers
+
+
 import numpy as np 
 from scipy import optimize
 import matplotlib.pyplot as plt
@@ -185,6 +191,27 @@ def events_from_activations(activations, events, delay_coeff):
 
     return on_events, off_events
 
+# =============================================================================
+def create_mlp(input_size, hidden_size, output_size, learning_rate):
+    """
+    Function used to create a small mlp used for classification porpuses 
+    Arguments :
+        input_size (int) : size of the input layer
+        hidden_size (int) : size of the hidden layer
+        output_size (int) : size of the output layer
+        learning_rate (int) : the learning rate for the optiomization alg.
+    Returns :
+        mlp (keras model) : the freshly baked network
+    """
+    mlp = Sequential()
+    mlp.add(Dense(input_size,activation='relu'))
+    mlp.add(Dense(hidden_size,activation='relu'))
+    mlp.add(Dense(output_size, activation='sigmoid'))
+    adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+    mlp.compile(loss='mean_squared_error',
+              optimizer=adam,
+              metrics=['accuracy'])
+    return mlp
 
 # Method for live printing the current set of basis during learning   
 # =============================================================================
