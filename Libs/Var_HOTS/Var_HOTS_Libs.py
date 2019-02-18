@@ -101,8 +101,8 @@ def create_mlp(input_size, hidden_size, output_size, learning_rate):
     mlp = Sequential()
     mlp.add(Dense(hidden_size, input_dim=input_size, activation='relu'))
     mlp.add(Dense(output_size, activation='sigmoid'))
-    adam=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
-    mlp.compile(optimizer=adam,
+    rmsprop=optimizers.RMSprop(lr=learning_rate, rho=0.9, epsilon=None, decay=0.0)
+    mlp.compile(optimizer=rmsprop,
               loss='categorical_crossentropy',
               metrics=['accuracy'])
     return mlp

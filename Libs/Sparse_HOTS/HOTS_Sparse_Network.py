@@ -908,7 +908,7 @@ class HOTS_Sparse_Net:
                                      max(labels) but, first, it's wasted computation, 
                                      second, the user should move his/her ass and eat 
                                      less donuts)
-            learning_rate (float) : The method is Adam
+            learning_rate (float) : The method is RMSprop
             
             method (string) : string with the method you want to use to compute activations:
                          "CG" for Coniugate Gradient Descent

@@ -255,7 +255,7 @@ class Var_HOTS_Net:
                                      max(labels) but, first, it's wasted computation, 
                                      second, the user should move his/her ass and eat 
                                      less donuts)
-            learning_rate (float) : The method is Adam 
+            learning_rate (float) : The method is RMSprop 
             dataset (nested lists) : the dataset used for learn classification, if not declared the method
                          will use the last response of the network. To avoid surprises 
                          check that the labels inserted here and the dataset used for 
