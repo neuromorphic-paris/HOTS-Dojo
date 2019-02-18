@@ -29,7 +29,7 @@ sns.set(style="white")
 plt.style.use("dark_background")
 
 ### Selecting the dataset
-shuffle_seed = 13 # seed used for dataset shuffling, if set to 0 the process will be totally random
+shuffle_seed = 192 # seed used for dataset shuffling, if set to 0 the process will be totally random
 
 #%% Cards dataset
 # The number of cards recordings is not the same for every symbol, thus in order
@@ -101,7 +101,7 @@ print("Learning elapsed time : "+str(elapsed_time))
 # =============================================================================
 
 layer = 1  
-variables_ind = [0,1] 
+variables_ind = [1,2] 
 variable_fix = 0 
                     
 Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)

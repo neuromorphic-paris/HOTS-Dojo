@@ -29,8 +29,8 @@ import seaborn as sns
 
 
 # Homemade Fresh Libraries like Gandma taught
-from Libs.Original_HOTS.Time_Surface_generators import Time_Surface_event,Time_Surface_all
-from Libs.Original_HOTS.HOTS_Sparse_Libs import error_func, error_func_deriv_a_j,\
+from Libs.Sparse_HOTS.Time_Surface_generators import Time_Surface_event,Time_Surface_all
+from Libs.Sparse_HOTS.HOTS_Sparse_Libs import error_func, error_func_deriv_a_j,\
 update_basis_online, update_basis_online_hard_treshold, update_basis_offline_CG,\
 events_from_activations, surface_live_plot, exp_decay, create_mlp
 
@@ -429,10 +429,10 @@ class HOTS_Sparse_Net:
                     opt_res = update_basis_offline_CG(self.basis[layer][sublayer],
                                                       self.surfaces_dimensions[layer][0]*self.polarities[layer],
                                                       self.surfaces_dimensions[layer][1], 
-                                                      self.basis_number[layer], sub_layer_activations,
+                                                      self.features_number[layer], sub_layer_activations,
                                                       all_surfaces, base_norm_coeff)
                     
-                    self.basis[layer][sublayer] = opt_res.x.reshape(self.basis_number[layer],
+                    self.basis[layer][sublayer] = opt_res.x.reshape(self.features_number[layer],
                               self.surfaces_dimensions[layer][1], self.surfaces_dimensions[layer][0]*self.polarities[layer])
                     sub_layer_errors.append(opt_res.fun)
                     n_steps += 1
@@ -492,30 +492,30 @@ class HOTS_Sparse_Net:
             dataset_length (int) : the lenght of the entire dataset in number of recordings
         """
         #it will store the intial basis too, thus +1 on the dataset length 
-        self.basis_history=[[[np.zeros(self.basis[layer][sublayer].shape) for batch in range(dataset_length+1)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.basis_history=[[[np.zeros(self.basis[layer][sublayer].shape) for recording in range(dataset_length+1)] for sublayer in range(2**layer)] for layer in range(self.layers)]
         for layer in range(self.layers):
             for sublayer in range(2**layer):
                 self.basis_history[layer][sublayer][0]=self.basis[layer][sublayer]
-        self.noise_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
-        self.sparsity_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
-        self.sensitivity_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
-        self.learning_history=[[[0 for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
-        self.basis_distance=[[[np.zeros(len(self.basis[layer][sublayer])) for batch in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.noise_history=[[[0 for recording in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.sparsity_history=[[[0 for recording in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.sensitivity_history=[[[0 for recording in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.learning_history=[[[0 for recording in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
+        self.basis_distance=[[[np.zeros(len(self.basis[layer][sublayer])) for recording in range(dataset_length)] for sublayer in range(2**layer)] for layer in range(self.layers)]
         
                 
 
     # =============================================================================  
-    def evolution_save_point(self, layer, sublayer, batch, noise, sparsity, sensitivity, learning):
+    def evolution_save_point(self, layer, sublayer, recording, noise, sparsity, sensitivity, learning):
         """
         Method useful to save network status in relation of its previous history
         in this way is possible to test evolution parameters and test wether an 
-        online method is overfitting in a particular batch.
+        online method is overfitting in a particular recording.
         In the future the outlook of the online method will be to implement overparameters
         to control the network in a fine and less supervised manner.
         Arguments:
             layer (int) : the index of the selected layer 
             sublayer (int) : the index of the selected sublayer 
-            batch (int) : the index of the batch in the dataset
+            recording (int) : the index of the recording in the dataset
             noise (float) : the noise coefficient at the saving time.
             sparsity (float) : the sparsity coefficient at the saving time.
             sensitivity (float) : the sensitivity coefficient at the saving time.
@@ -523,15 +523,15 @@ class HOTS_Sparse_Net:
                
         # It saves the set of basis, and the status of the evolution parameters.
         """
-        self.basis_history[layer][sublayer][batch+1]=self.basis[layer][sublayer].copy()
-        self.noise_history[layer][sublayer][batch]=noise
-        self.sparsity_history[layer][sublayer][batch]=sparsity
-        self.sensitivity_history[layer][sublayer][batch]=sensitivity
-        self.learning_history[layer][sublayer][batch]=learning
+        self.basis_history[layer][sublayer][recording+1]=self.basis[layer][sublayer].copy()
+        self.noise_history[layer][sublayer][recording]=noise
+        self.sparsity_history[layer][sublayer][recording]=sparsity
+        self.sensitivity_history[layer][sublayer][recording]=sensitivity
+        self.learning_history[layer][sublayer][recording]=learning
         distance = np.zeros(len(self.basis[layer][sublayer]))
         for i,feature in enumerate(self.basis[layer][sublayer]):
-            distance[i] = np.sum(self.basis_history[layer][sublayer][batch][i,:,:]-feature)**2
-        self.basis_distance[layer][sublayer][batch]=distance
+            distance[i] = np.sum(self.basis_history[layer][sublayer][recording][i,:,:]-feature)**2
+        self.basis_distance[layer][sublayer][recording]=distance
                 
 
 
@@ -645,7 +645,7 @@ class HOTS_Sparse_Net:
         residue = timesurface-S_tilde
         error =  np.sum(residue**2)
         return error
-    #TODO continue from here
+    
     # =============================================================================  
     def full_net_dataset_response(self, dataset, method="Exp distance", noise_ratio=0, sparsity_coeff=0,
                      sensitivity=0):
@@ -678,16 +678,16 @@ class HOTS_Sparse_Net:
         Returns:
             full_net_activations (nested lists) : the whole history of the network activity 
         """
-        # The list of all data batches devided for sublayer 
-        # batches[sublayer][actual_batch][events, timestamp if 0 or xy coordinates if 1]
-        batches = []
-        # In the first layer the data batches are the input dataset given by the user
-        batches.append(dataset)
+        # The list of all data processed per layer devided for sublayer 
+        # input_data[sublayer][actual_recording][events, timestamp if 0 or xy coordinates if 1]
+        input_data = []
+        # In the first layer the input_data is the input dataset given by the user
+        input_data.append(dataset)
+        
         full_net_activations = []
-        #
-        num_polarities = self.first_layer_polarities
+        
         for layer in range(self.layers):
-            outbatches = []
+            outrecordings = []
             layer_activations = []
             for sublayer in range(len(self.basis[layer])):
                 # Counter of surfaces that will be used to update evolution parameters
@@ -695,21 +695,21 @@ class HOTS_Sparse_Net:
                 sub_layer_outevents_on = []
                 sub_layer_outevents_off = []
                 sub_layer_activations = []
-                for batch in range(len(batches[sublayer])):
-                    batch_surfaces = []
-                    batch_reference_events = []
-                    batch_activations = []
-                    for k in range(len(batches[sublayer][batch][0])):
-                        single_event = [batches[sublayer][batch][0][k], batches[sublayer][batch][1][k]]
+                for recording in range(len(input_data[sublayer])):
+                    recording_surfaces = []
+                    recording_reference_events = []
+                    recording_activations = []
+                    for k in range(len(input_data[sublayer][recording][0])):
+                        single_event = [input_data[sublayer][recording][0][k], input_data[sublayer][recording][1][k]]
                         tsurface = Time_Surface_event(xdim = self.surfaces_dimensions[layer][0],
                                                       ydim = self.surfaces_dimensions[layer][1],
                                                       event=single_event,
                                                       timecoeff=self.taus[layer],
-                                                      dataset=batches[sublayer][batch],
-                                                      num_polarities=num_polarities,
+                                                      dataset=input_data[sublayer][recording],
+                                                      num_polarities=self.polarities[layer],
                                                       verbose=False)
-                        batch_surfaces.append(tsurface)
-                        batch_reference_events.append(single_event)
+                        recording_surfaces.append(tsurface)
+                        recording_reference_events.append(single_event)
                         if method == "CG":
                             sub_layer_errors.append(self.sublayer_response_CG(layer, sublayer,
                                                                               tsurface,
@@ -729,55 +729,56 @@ class HOTS_Sparse_Net:
                                                                                        sensitivity))
                         
                         
-                        batch_activations.append(self.activations[layer][sublayer])
-                    # Obtaining the events resulting from the activations in a single batch
-                    outevents = events_from_activations(batch_activations,
-                                                        batch_reference_events,
+                        recording_activations.append(self.activations[layer][sublayer])
+                    # Obtaining the events resulting from the activations in a single recording
+                    outevents = events_from_activations(recording_activations,
+                                                        recording_reference_events,
                                                          self.delay_coeff)
                     sub_layer_outevents_on.append(outevents[0])
                     sub_layer_outevents_off.append(outevents[1])
-                    sub_layer_activations.append(batch_activations)
-                    if verbose is True:
-                        print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  Batch processing:"+np.str(((batch+1)/len(batches[sublayer]))*100)+"%")
+                    sub_layer_activations.append(recording_activations)
+                    if self.verbose is True:
+                        print("Layer:"+np.str(layer)+"  Sublayer:"+np.str(sublayer)+"  recording processing:"+np.str(((recording+1)/len(input_data[sublayer]))*100)+"%")
                 layer_activations.append(sub_layer_activations)
-                outbatches.append(sub_layer_outevents_on)       
-                outbatches.append(sub_layer_outevents_off)
+                outrecordings.append(sub_layer_outevents_on)       
+                outrecordings.append(sub_layer_outevents_off)
             full_net_activations.append(layer_activations)
-            batches = outbatches.copy()
-            num_polarities = self.basis_number[layer]
+            input_data = outrecordings.copy()
 
         return full_net_activations
     
     
-    
-    # Method for plotting reconstruction heatmap and reconstruction error
-    # =============================================================================
-    # layer : the index of the selected layer 
-    # sublayer : the index of the selected sublayer     
-    # timesurface: the imput time surface
-    # method : string with the method you want to use :
-    #          "CG" for Coniugate Gradient Descent
-    #          "Exp distance" for the model with lateral inhibition and explicit
-    #           exponential distance computing
-    #
-    # noise_ratio: The model responses can be mixed with noise, it can improve  
-    #               learning speed 
-    # sparsity_coeff: The model presents lateral inhibtion between the basis,
-    #                 it selects a winner depending on the responses, and feed 
-    #                 back it's activity timed minus the sparsity_coeff to 
-    #                 inhibit the neighbours. a value near one will result
-    #                 in a Winner-Takes-All mechanism like on the original 
-    #                 HOTS (For CG it's implemented as a weighted L1 coinstraint
-    #                 on the activations in the Error function)
-    # sensitivity : Each activation is computed as a guassian distance between 
-    #               a base and the upcoming timesurface, this coefficient it's
-    #               the gaussian 'variance' and it modulates cell selectivity
-    #               to their encoded feature (Feature present only on Exp distance)   
-    #    
-    # It also returns the Error of reconstruction
+
     # =============================================================================  
     def sublayer_reconstruct(self, layer, sublayer, timesurface, method,
                              noise_ratio, sparsity_coeff, sensitivity):
+        """
+        Method for plotting reconstruction heatmap and reconstruction error
+        Arguments:
+            layer (int) : the index of the selected layer 
+            sublayer (int) : the index of the selected sublayer     
+            timesurface (numpy matrix) : the imput time surface
+            method (string) : string with the method you want to use :
+                         "CG" for Coniugate Gradient Descent
+                         "Exp distance" for the model with lateral inhibition and explicit
+                          exponential distance computing
+            
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                                  learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                                it selects a winner depending on the responses, and feed 
+                                back it's activity timed minus the sparsity_coeff to 
+                                inhibit the neighbours. a value near one will result
+                                in a Winner-Takes-All mechanism like on the original 
+                                HOTS (For CG it's implemented as a weighted L1 coinstraint
+                                on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance) 
+        Returns:
+            error (float) : The error of reconstruction
+        """
         if method == "CG":
             error = self.sublayer_response_CG(layer, sublayer,
                                               timesurface,
@@ -806,7 +807,7 @@ class HOTS_Sparse_Net:
         return error
     
     # Method for computing the reconstruction error of a sublayer set of basis
-    # for an entire batch of time surfaces
+    # for an entire recording of time surfaces
     # =============================================================================
     # layer : the index of the selected layer 
     # sublayer : the index of the selected sublayer         
@@ -836,23 +837,54 @@ class HOTS_Sparse_Net:
     def batch_sublayer_reconstruct_error(self, layer, sublayer, timesurfaces,
                                          method, noise_ratio, sparsity_coeff,
                                          sensitivity):
+        """
+        Method for computing the reconstruction error of a sublayer set of basis
+        for an entire recording of time surfaces
+        
+                Method for plotting reconstruction heatmap and reconstruction error
+        Arguments:
+            layer (int) : the index of the selected layer 
+            sublayer (int) : the index of the selected sublayer     
+            timesurfaces (list of numpy matrices) : the imput time surface
+            method (string) : string with the method you want to use :
+                         "CG" for Coniugate Gradient Descent
+                         "Exp distance" for the model with lateral inhibition and explicit
+                          exponential distance computing
+            
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                                  learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                                it selects a winner depending on the responses, and feed 
+                                back it's activity timed minus the sparsity_coeff to 
+                                inhibit the neighbours. a value near one will result
+                                in a Winner-Takes-All mechanism like on the original 
+                                HOTS (For CG it's implemented as a weighted L1 coinstraint
+                                on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance) 
+       Returns:
+            error (float) : The mean error of reconstruction
+        
+        """
         error = 0
         total_surf = 0
         for i in range(len(timesurfaces)):
             for k in range(len(timesurfaces[i])):
                 if method == "CG":
-                    error = self.sublayer_response_CG(layer, sublayer,
+                    error += self.sublayer_response_CG(layer, sublayer,
                                                       timesurfaces[i][k],
                                                       sparsity_coeff,
                                                       noise_ratio)
                 if method == "Exp distance": 
-                    error = self.sublayer_response_exp_distance(layer, sublayer,
+                    error += self.sublayer_response_exp_distance(layer, sublayer,
                                                                 timesurfaces[i][k],
                                                                 sparsity_coeff, 
                                                                 noise_ratio, 
                                                                 sensitivity)
                 if method=="Dot product":
-                    error = self.sublayer_response_dot_product(layer, sublayer,
+                    error += self.sublayer_response_dot_product(layer, sublayer,
                                                                timesurfaces[i][k],
                                                                sparsity_coeff, 
                                                                noise_ratio, 
@@ -860,133 +892,179 @@ class HOTS_Sparse_Net:
                 total_surf += 1
         return error/total_surf
 
-    # Method for training a mlp classification model 
+    # Method for training a mlp classification model NB can work only on a single sublayer (Thus with rectified outputs)
     # =============================================================================      
-    def mlp_classification_train(self, labels, number_of_labels, learning_rate, dataset=[]):
+    def mlp_classification_train(self, dataset, labels, number_of_labels, learning_rate, method,
+                                 noise_ratio, sparsity_coeff, sensitivity):
         """
         Method to train a simple mlp, to a classification task, to test the feature 
         rapresentation automatically extracted by HOTS
         
         Arguments:
+            dataset (nested lists) : the dataset used for learn classification.
             labels (list of int) : List of integers (labels) of the dataset
             number_of_labels (int) : The total number of different labels that,
                                      I am excepting in the dataset, (I know that i could
                                      max(labels) but, first, it's wasted computation, 
                                      second, the user should move his/her ass and eat 
                                      less donuts)
-            learning_rate (float) : The method is Adam 
-            dataset (nested lists) : the dataset used for learn classification, if not declared the method
-                         will use the last response of the network. To avoid surprises 
-                         check that the labels inserted here and the dataset used for 
-                         either .learn .full_net_dataset_response a previous .mlp_classification_train
-                         .mlp_classification_test is matching (Which is extremely faster
-                         than computing the dataset again, but be aware of that)
+            learning_rate (float) : The method is Adam
+            
+            method (string) : string with the method you want to use to compute activations:
+                         "CG" for Coniugate Gradient Descent
+                         "Exp distance" for the model with lateral inhibition and explicit
+                          exponential distance computing
+            
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                                  learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                                it selects a winner depending on the responses, and feed 
+                                back it's activity timed minus the sparsity_coeff to 
+                                inhibit the neighbours. a value near one will result
+                                in a Winner-Takes-All mechanism like on the original 
+                                HOTS (For CG it's implemented as a weighted L1 coinstraint
+                                on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance) 
+
 
         """
         
-        full_net_activation=self.full_net_dataset_response(dataset=dataset, save=True)            
-        last_layer_activity = full_net_activation[-1]      
-        processed_labels = np.concatenate([labels[recording]*np.ones(len(last_layer_activity[recording])) for recording in range(len(labels))])
+        net_activity = self.full_net_dataset_response(dataset, method, 
+                                                      noise_ratio, 
+                                                      sparsity_coeff,
+                                                      sensitivity)
+        last_layer_activity = net_activity[-1][0]            
+
+        
+        n_events_per_recording = [len(last_layer_activity[recording]) for recording in range(len(labels))]
+        concatenated_last_layer_activity = np.concatenate(last_layer_activity)
+        processed_labels = np.concatenate([labels[recording]*np.ones(n_events_per_recording[recording]) for recording in range(len(labels))])
         processed_labels = keras.utils.to_categorical(processed_labels, num_classes = number_of_labels)
-        last_layer_activity = np.concatenate(last_layer_activity)
-        n_latent_var = self.latent_variables[-1]
-        self.mlp = create_mlp(input_size=n_latent_var,hidden_size=120,output_size=number_of_labels, 
+        input_size = self.polarities[-1]*(2**(self.layers-1))
+        self.mlp = create_mlp(input_size=input_size, hidden_size=120, output_size=number_of_labels, 
                               learning_rate=learning_rate)
-        self.mlp.fit(np.array(last_layer_activity), np.array(processed_labels),
-          epochs=20,
+        self.mlp.summary()
+        self.mlp.fit(concatenated_last_layer_activity, processed_labels,
+          epochs=50,
           batch_size=125)
             
         if self.verbose is True:
             print("Training ended, you can now access the trained network with the method .mlp")
 
-    # Method for testing the mlp classification model
-    # =============================================================================
+    # Method for testing the mlp classification model (Thus with rectified outputs)
     # =============================================================================      
-    def mlp_classification_test(self, labels, number_of_labels, dataset=[]):
+    def mlp_classification_test(self, dataset, labels, number_of_labels, method,
+                                 noise_ratio, sparsity_coeff, sensitivity):
         """
         Method to test a simple mlp, to a classification task, to test the feature 
         rapresentation automatically extracted by HOTS
         
         Arguments:
+            dataset (nested lists) : the dataset used for learn classification.
             labels (list of int) : List of integers (labels) of the dataset
             number_of_labels (int) : The total number of different labels that,
                                      I am excepting in the dataset, (I know that i could
                                      max(labels) but, first, it's wasted computation, 
                                      second, the user should move his/her ass and eat 
                                      less donuts)
-            dataset (nested lists) : the dataset used for testing classification, if not declared the method
-                                     will use the last response of the network. To avoid surprises 
-                                     check that the labels inserted here and the dataset used for 
-                                     either .learn .full_net_dataset_response a previous .mlp_classification_train
-                                     .mlp_classification_test is matching (Which is extremely faster
-                                     than computing the dataset again, but be aware of that)
+           
+            method (string) : string with the method you want to use to compute activations:
+                         "CG" for Coniugate Gradient Descent
+                         "Exp distance" for the model with lateral inhibition and explicit
+                          exponential distance computing
+            
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                                  learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                                it selects a winner depending on the responses, and feed 
+                                back it's activity timed minus the sparsity_coeff to 
+                                inhibit the neighbours. a value near one will result
+                                in a Winner-Takes-All mechanism like on the original 
+                                HOTS (For CG it's implemented as a weighted L1 coinstraint
+                                on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance) 
+
 
         """
-        full_net_activation=self.full_net_dataset_response(dataset=dataset, save=True)     
-        last_layer_activity = full_net_activation[-1]   
-        last_layer_activity = np.concatenate(last_layer_activity)
-        predicted_labels_ev=self.mlp.predict(np.array(last_layer_activity),batch_size=125)
+        net_activity = self.full_net_dataset_response(dataset, method, 
+                                                      noise_ratio, 
+                                                      sparsity_coeff,
+                                                      sensitivity)
+        last_layer_activity = net_activity[-1][0]                
+        concatenated_last_layer_activity = np.concatenate(last_layer_activity)
+        predicted_labels_ev=self.mlp.predict(concatenated_last_layer_activity,batch_size=125)
         counter=0
         predicted_labels=[]
-        for recording in range(len(self.last_layer_activations)):
-            activity_sum = sum(predicted_labels_ev[counter:counter+len(self.last_layer_activations[recording])])
+        for recording in range(len(last_layer_activity)):
+            activity_sum = sum(predicted_labels_ev[counter:counter+len(last_layer_activity[recording])])
             predicted_labels.append(np.argmax(activity_sum))
-            counter += len(self.last_layer_activations[recording])
+            counter += len(last_layer_activity[recording])
         prediction_rate=0
         for i,true_label in enumerate(labels):
             prediction_rate += (predicted_labels[i] == true_label)/len(labels)
         return prediction_rate, predicted_labels, predicted_labels_ev
     
-
-
     
-    # Method for plotting the basis set of a single sublayer
-    # =============================================================================
-    # layer : the index of the selected layer 
-    # sublayer : the index of the selected sublayer
+
     # =============================================================================
     def plot_basis(self, layer, sublayer):
-        for i in range(self.basis_number[layer]):
+        """
+        Method for plotting the basis set of a single sublayer
+        Arguments:
+            layer (int) : the index of the selected layer 
+            sublayer (int) : the index of the selected sublayer
+        """
+        for i in range(self.features_number[layer]):
             plt.figure("Base N: "+str(i))
             sns.heatmap(self.basis[layer][sublayer][i])
             
-                # Method for printing the evolution of the network after online learning   
-    # =============================================================================
-    # layer : the index of the selected layer 
-    # sublayer : the index of the selected sublayer 
-    # figures : is figure is empty, the function will generate a new set of them,
-    #           otherwise the new axes will be printed on the old ones to update them
-    # axes : the axes of the previous figures, if not provided the function will generate
-    #        a new set of them
-    # 
-    # It returns the figure lists for updating the graphs if needed
+
     # =============================================================================  
     def plot_evolution(self, layer, sublayer, figures=[], axes=[]):
+        """
+        Method for printing the evolution of the network after online learning   
+        Aruments:
+            layer (int) : the index of the selected layer 
+            sublayer (int) : the index of the selected sublayer 
+            figures (list of matplotlib figures) : is figure is empty, the function will generate a new set of them,
+                                                   otherwise the new axes will be printed on the old ones to update them
+            axes (list of matplotlib axes) : the axes of the previous figures, if not provided the function will generate
+                                             a new set of them
+        Returns:
+            figures (list of matplotlib figures) : If needed they can be updated
+            axes (list of matplotlib axes) : If needed they can be updated
+        """
         if figures==[]:
-            figures.append(plt.figure("Basis evolution per batch (euclidean distance between sets of basis)"))
+            figures.append(plt.figure("Basis evolution per recording (euclidean distance between sets of basis)"))
             distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]
             axes.append(figures[0].add_subplot('111'))
             axes[0].plot(self.basis_distance[layer][sublayer])
             axes[0].legend(tuple(distance_legend))
-            axes[0].set_xlabel("Batch Number")
+            axes[0].set_xlabel("Recording Number")
             
             evolution_parameters=np.array([self.noise_history[layer][sublayer], 
                                            self.learning_history[layer][sublayer],
                                            self.sparsity_history[layer][sublayer],
                                            self.sensitivity_history[layer][sublayer]]).transpose()
             evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
-            figures.append(plt.figure("Network parameter evolution per batch"))
+            figures.append(plt.figure("Network parameter evolution per recording"))
             axes.append(figures[1].add_subplot('111'))
             axes[1].plot(evolution_parameters)
             axes[1].legend(tuple(evolution_legend))
-            axes[1].set_xlabel("Batch Number")
+            axes[1].set_xlabel("Recording Number")
         else:
             
             axes[0].clear()
             distance_legend = ["Base N: "+str(i) for i in range(len(self.basis[layer][sublayer]))]                  
             axes[0].plot(self.basis_distance[layer][sublayer])
             axes[0].legend(tuple(distance_legend))
-            axes[0].set_xlabel("Batch Number")
+            axes[0].set_xlabel("Recording Number")
             
             axes[1].clear()
             evolution_parameters=np.array([self.noise_history[layer][sublayer], 
@@ -996,7 +1074,7 @@ class HOTS_Sparse_Net:
             evolution_legend = ("Noise","Learning step","Sparsity","Sensitivity")
             axes[1].plot(evolution_parameters)
             axes[1].legend(tuple(evolution_legend))
-            axes[1].set_xlabel("Batch Number")
+            axes[1].set_xlabel("Recording Number")
         return figures, axes
 
 

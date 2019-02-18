@@ -11,7 +11,7 @@ import time
 import datetime
 import os
 import pickle
-from Libs.Original_HOTS.HOTS_Sparse_Network import HOTS_Sparse_Net
+from Libs.Sparse_HOTS.HOTS_Sparse_Network import HOTS_Sparse_Net
 from Libs.Cards_loader import Cards_loader
 
 # To avoid MKL inefficient multythreading
@@ -55,8 +55,8 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # 
 # =============================================================================
 
-basis_number = [8]
-basis_dimension = [[11,11]]
+features_numner = [8]
+surfaces_dimensions = [[11,11]]
 taus = [10000]
 
 # I won't use polarity information because is not informative for the given task
@@ -67,7 +67,7 @@ net_seed = 2
 delay_coeff = 0
 
 # Generate the network
-Net = HOTS_Sparse_Net(basis_number, basis_dimension, taus, first_layer_polarities, delay_coeff, net_seed)
+Net = HOTS_Sparse_Net(features_numner, surfaces_dimensions, taus, first_layer_polarities, delay_coeff, net_seed)
 
 #%% Learning-online-Exp distance and Thresh
 learning_method = "learn_online"
@@ -84,7 +84,7 @@ Net.learn_online(dataset=dataset_learning,
                   method=activation_method, base_norm=base_norm,
                   noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
                   sensitivity=sensitivity,
-                  learning_rate=learning_rate, verbose=True)
+                  learning_rate=learning_rate)
 
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
@@ -92,55 +92,67 @@ print("Learning elapsed time : "+str(elapsed_time))
 #%% Learning-online-Dot product distance and Thresh (with full spartsity)
 # This method is similiar to the one implemented in the first 2D HOTS
 # Sparsity needs to be set to always 1 
-learning_method = "learn_online"
-activation_method = "Dot product"
-base_norm="Thresh"
-start_time = time.time()
-
-sparsity_coeff = [1, 1, 10000]
-learning_rate = [0.08, 0.0008, 300]
-noise_ratio = [1, 0, 300]
-sensitivity = [1, 1, 1] # This parameter is a name place holder
-
-Net.learn_online(dataset=dataset_learning,
-                  method=activation_method, base_norm=base_norm,
-                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
-                  sensitivity=sensitivity,
-                  learning_rate=learning_rate, verbose=True)
-
-elapsed_time = time.time()-start_time
-print("Learning elapsed time : "+str(elapsed_time))
+#learning_method = "learn_online"
+#activation_method = "Dot product"
+#base_norm="Thresh"
+#start_time = time.time()
+#
+#sparsity_coeff = [1, 1, 10000]
+#learning_rate = [0.08, 0.0008, 300]
+#noise_ratio = [1, 0, 300]
+#sensitivity = [1, 1, 1] # This parameter is a name place holder
+#
+#Net.learn_online(dataset=dataset_learning,
+#                  method=activation_method, base_norm=base_norm,
+#                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
+#                  sensitivity=sensitivity,
+#                  learning_rate=learning_rate, verbose=True)
+#
+#elapsed_time = time.time()-start_time
+#print("Learning elapsed time : "+str(elapsed_time))
 
 #%% Learning offline full batch
-learning_method = "learn_offline"
-activation_method = "CG"
-base_norm="L2"
-start_time = time.time()
-
-sparsity_coeff = 0.8
-learning_rate = 0.2        
-max_steps = 3
-base_norm_coeff = 0.0005
-precision = 0.01
-
-  
-Net.learn_offline(dataset_learning, sparsity_coeff, learning_rate, max_steps, base_norm_coeff, precision, verbose=True)
-    
-elapsed_time = time.time()-start_time
-print("Learning elapsed time : "+str(elapsed_time))
+#learning_method = "learn_offline"
+#activation_method = "CG"
+#base_norm="L2"
+#start_time = time.time()
+#
+#sparsity_coeff = 0.8
+#learning_rate = 0.2        
+#max_steps = 3
+#base_norm_coeff = 0.0005
+#precision = 0.01
+#
+#  
+#Net.learn_offline(dataset_learning, sparsity_coeff, learning_rate, max_steps, base_norm_coeff, precision)
+#    
+#elapsed_time = time.time()-start_time
+#print("Learning elapsed time : "+str(elapsed_time))
 
 
 
 #%% Mlp classifier training
-#TODO this method is pretty much copy pasted by Var_HOTS, fix it and make Original_HOTS better
+if learning_method=="learn_online": # The parameters are evolving
+    # Taking the steady state values to perform classification
+    sparsity_coeff_mlp = sparsity_coeff[1]
+    noise_ratio_mlp = 0
+    sensitivity_mlp = sensitivity[1]
+
+if learning_method=="learn_offline": # The parameters are fixed
+    # Taking the steady state values to perform classification
+    sparsity_coeff_mlp = sparsity_coeff
+    noise_ratio_mlp = 0
+    sensitivity_mlp = 0
+    
 number_of_labels=len(legend)
 mlp_learning_rate = 0.01
-Net.mlp_classification_train(labels_learning,   
-                                   number_of_labels, mlp_learning_rate, dataset_learning)
+Net.mlp_classification_train(dataset_learning, labels_learning, number_of_labels, learning_rate, activation_method,
+                                noise_ratio_mlp, sparsity_coeff_mlp, sensitivity_mlp)
 
 #%% Mlp classifier testing
 
-prediction_rate, predicted_labels, predicted_labels_ev = Net.mlp_classification_test(labels_testing, number_of_labels, dataset_testing)
+prediction_rate, predicted_labels, predicted_labels_ev = Net.mlp_classification_test(dataset_learning, labels_learning, number_of_labels, activation_method,
+                                 noise_ratio_mlp, sparsity_coeff_mlp, sensitivity_mlp)
 print('Prediction rate is '+str(prediction_rate*100)+'%')    
 
 #%% Save network parameters
@@ -163,7 +175,7 @@ if learning_method=="learn_offline":
 with open(parameter_folder+file_name, 'wb') as f:
     pickle.dump([basis_number, basis_dimension, taus, delay_coeff, learning_method,
                  activation_method ,base_norm, sparsity_coeff,
-                 learning_rate, noise_ratio, sensitivity, additional_save], f)
+                 learning_rate, noise_ratio, sensitivity, mlp_learning_rate, additional_save], f)
     
 #%% Plot Network Evolution
 

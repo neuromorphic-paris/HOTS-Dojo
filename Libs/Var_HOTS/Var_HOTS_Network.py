@@ -272,10 +272,11 @@ class Var_HOTS_Net:
         processed_labels = keras.utils.to_categorical(processed_labels, num_classes = number_of_labels)
         last_layer_activity = np.concatenate(last_layer_activity)
         n_latent_var = self.latent_variables[-1]
-        self.mlp = create_mlp(input_size=n_latent_var,hidden_size=120,output_size=number_of_labels, 
+        self.mlp = create_mlp(input_size=n_latent_var,hidden_size=120, output_size=number_of_labels, 
                               learning_rate=learning_rate)
+        self.mlp.summary()
         self.mlp.fit(np.array(last_layer_activity), np.array(processed_labels),
-          epochs=20,
+          epochs=50,
           batch_size=125)
             
         if self.verbose is True:
