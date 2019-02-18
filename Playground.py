@@ -146,8 +146,8 @@ if learning_method=="learn_offline": # The parameters are fixed
     
 number_of_labels=len(legend)
 mlp_learning_rate = 0.01
-Net.mlp_classification_train(dataset_learning, labels_learning, number_of_labels, learning_rate, activation_method,
-                                noise_ratio_mlp, sparsity_coeff_mlp, sensitivity_mlp)
+Net.mlp_classification_train(dataset_learning, labels_learning, number_of_labels, mlp_learning_rate, activation_method,
+                                noise_ratio_mlp, sparsity_coeff_mlp, sensitivity_mlp,)
 
 #%% Mlp classifier testing
 
