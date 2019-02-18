@@ -18,6 +18,7 @@ The links:
 from keras.layers import Input,Dense
 from keras.models import Sequential, Model
 from keras import optimizers
+from keras import backend as K
 
 
 import numpy as np 
@@ -206,10 +207,10 @@ def create_mlp(input_size, hidden_size, output_size, learning_rate):
     mlp = Sequential()
     mlp.add(Dense(hidden_size, input_dim=input_size, activation='relu'))
     mlp.add(Dense(output_size, activation='sigmoid'))    
-    rmsprop=optimizers.RMSprop(lr=learning_rate, rho=0.9, epsilon=None, decay=0.0)
-    mlp.compile(optimizer=rmsprop,
-              loss='categorical_crossentropy',
+    mlp.compile(optimizer='adam',
+              loss='mean_squared_error',
               metrics=['accuracy'])
+    K.set_value(mlp.optimizer.lr, learning_rate)
     return mlp
 
 # Method for live printing the current set of basis during learning   
