@@ -22,7 +22,6 @@ import numpy as np
 import keras
 from scipy import optimize
 from scipy.spatial import distance
-from joblib import Parallel, delayed 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
@@ -44,7 +43,7 @@ class HOTS_Sparse_Net:
 
     # =============================================================================
     def __init__(self, features_number, surfaces_dimensions, taus, first_layer_polarities,
-                 delay_coeff, net_seed = 0, threads=1, verbose=False):
+                 delay_coeff, net_seed = 0, verbose=False):
         """
         Network constructor settings, the net is set in a random state,
         with random basis and activations to define a starting point for the 
@@ -71,8 +70,6 @@ class HOTS_Sparse_Net:
                 delay_coeff (list of int) : it's the cofficient named alfa used for generating an event in the paper
                 net_seed (int) : seed used for net parameters generation,
                                  if set to 0 the process will be totally random
-                threads (int) : The network can compute timesurfaces in a parallel way,
-                                this parameter set the number of multiple threads allowed to run
                 verbose (bool) : If verbose is on, it will display graphs to assest the ongoing,
                                  learning algorithm (Per recording)
         
@@ -806,33 +803,7 @@ class HOTS_Sparse_Net:
         print(error)
         return error
     
-    # Method for computing the reconstruction error of a sublayer set of basis
-    # for an entire recording of time surfaces
-    # =============================================================================
-    # layer : the index of the selected layer 
-    # sublayer : the index of the selected sublayer         
-    # timesurfaces: the batch of time surfaces that the layer will try to reconstruct
-    # sparsity_coeff: reported as lambda in the Sparse Hots paper, is the norm
-    # method : string with the method you want to use :
-    #          "CG" for Coniugate Gradient Descent
-    #          "Exp distance" for the model with lateral inhibition and explicit
-    #           exponential distance computing
-    #
-    # noise_ratio: The model responses can be mixed with noise, it can improve  
-    #               learning speed 
-    # sparsity_coeff: The model presents lateral inhibtion between the basis,
-    #                 it selects a winner depending on the responses, and feed 
-    #                 back it's activity timed minus the sparsity_coeff to 
-    #                 inhibit the neighbours. a value near one will result
-    #                 in a Winner-Takes-All mechanism like on the original 
-    #                 HOTS (For CG it's implemented as a weighted L1 coinstraint
-    #                 on the activations in the Error function)
-    # sensitivity : Each activation is computed as a guassian distance between 
-    #               a base and the upcoming timesurface, this coefficient it's
-    #               the gaussian 'variance' and it modulates cell selectivity
-    #               to their encoded feature (Feature present only on Exp distance)   
-    #    
-    # It returns the mean error of reconstruction
+
     # =============================================================================  
     def batch_sublayer_reconstruct_error(self, layer, sublayer, timesurfaces,
                                          method, noise_ratio, sparsity_coeff,
@@ -943,14 +914,14 @@ class HOTS_Sparse_Net:
         concatenated_last_layer_activity = np.concatenate(last_layer_activity)
         processed_labels = np.concatenate([labels[recording]*np.ones(n_events_per_recording[recording]) for recording in range(len(labels))])
         processed_labels = keras.utils.to_categorical(processed_labels, num_classes = number_of_labels)
-        input_size = self.polarities[-1]*(2**(self.layers-1))
-        self.mlp = create_mlp(input_size=input_size, hidden_size=120, output_size=number_of_labels, 
+        input_size = self.features_number[-1]
+        self.mlp = create_mlp(input_size=input_size, hidden_size=20, output_size=number_of_labels, 
                               learning_rate=learning_rate)
         self.mlp.summary()
         self.mlp.fit(concatenated_last_layer_activity, processed_labels,
           epochs=50,
           batch_size=125)
-            
+        return processed_labels
         if self.verbose is True:
             print("Training ended, you can now access the trained network with the method .mlp")
 
@@ -1029,7 +1000,7 @@ class HOTS_Sparse_Net:
     def plot_evolution(self, layer, sublayer, figures=[], axes=[]):
         """
         Method for printing the evolution of the network after online learning   
-        Aruments:
+        Arguments:
             layer (int) : the index of the selected layer 
             sublayer (int) : the index of the selected sublayer 
             figures (list of matplotlib figures) : is figure is empty, the function will generate a new set of them,
@@ -1078,177 +1049,185 @@ class HOTS_Sparse_Net:
         return figures, axes
 
 
-             ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED METHODS GO TO SLEEP, ##
-              ##  UNTIL A LAZY DEVELOPER WILL DECIDE WHAT TO DO WITH THEM    ##
-        # =============================================================================
-    # =============================================================================  
-        # =============================================================================
-    # =============================================================================  
-        # =============================================================================
-    # =============================================================================  
 
-    # Method for training an histogram classification model as proposed in 
-    # HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
-    # https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=7508476
-    # =============================================================================
-    # dataset: the input dataset the network will respond to
-    # labels: the labels used for the classification task (positive integers from 0 to N)
-    # number_of_labels: the maximum number of labels of the dataset
-    # method : string with the method you want to use :
-    #          "CG" for Coniugate Gradient Descent
-    #          "Exp distance" for the model with lateral inhibition and explicit
-    #           exponential distance computing
-    # noise_ratio: The model responses can be mixed with noise, it can improve  
-    #               learning speed 
-    # sparsity_coeff: The model presents lateral inhibtion between the basis,
-    #                 it selects a winner depending on the responses, and feed 
-    #                 back it's activity timed minus the sparsity_coeff to 
-    #                 inhibit the neighbours. a value near one will result
-    #                 in a Winner-Takes-All mechanism like on the original 
-    #                 HOTS (For CG it's implemented as a weighted L1 coinstraint
-    #                 on the activations in the Error function)
-    # sensitivity : Each activation is computed as a guassian distance between 
-    #               a base and the upcoming timesurface, this coefficient it's
-    #               the gaussian 'variance' and it modulates cell selectivity
-    #               to their encoded feature (Feature present only on Exp distance)   
-    # verbose : If set to True the function will provide written feedback on the 
-    #                percentage of the dataset computed  
     # =============================================================================      
     def histogram_classification_train(self, dataset, labels, number_of_labels,
                                        method, noise_ratio, sparsity_coeff,
-                                         sensitivity, verbose=False):
+                                         sensitivity):
+        """
+        Method for training an histogram classification model as proposed in 
+        HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
+        https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=7508476
+        Arguments:
+            dataset (nested lists) : the initial dataset used for learning
+            labels (list of int) : the labels used for the classification task (from 0 to number_of_labels-1)
+            number_of_labels (int) : the maximum number of labels of the dataset
+            method (string) : string with the method you want to use :
+                              "CG" for Coniugate Gradient Descent
+                              "Exp distance" for the model with lateral inhibition and explicit
+                              exponential distance computing
+                              base_norm : Select whether use L2 norm or threshold constraints on basis
+                              learning with the keywords "L2" "Thresh" 
+        
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                           learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                             it selects a winner depending on the responses, and feed 
+                             back it's activity timed minus the sparsity_coeff to 
+                             inhibit the neighbours. a value near one will result
+                             in a Winner-Takes-All mechanism like on the original 
+                             HOTS (For CG it's implemented as a weighted L1 coinstraint
+                             on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance)
+        """
+       
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,
-                                                      sensitivity,
-                                                      verbose)
+                                                      sensitivity)
         
         
         last_layer_activity = net_activity[-1]        
         histograms = []
         normalized_histograms = []
-        n_basis = self.basis_number[-1]
+        n_basis = self.features_number[-1]
         # Normalization factor for building normalized histograms
         input_spikes_per_label = np.zeros(number_of_labels)
-        batch_per_label  = np.zeros(number_of_labels)
-        # this array it's used to count the number of batches with a certain label,
+        recording_per_label  = np.zeros(number_of_labels)
+        # this array it's used to count the number of recordings with a certain label,
         # the values will be then used to compute mean histograms
         for label in range(number_of_labels):
             histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
             normalized_histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
-        for batch in range(len(dataset)):
-            current_label = labels[batch]
-            input_spikes_per_label[current_label] += len(dataset[batch][0])
-            batch_per_label[current_label] += 1            
+        for recording in range(len(dataset)):
+            current_label = labels[recording]
+            input_spikes_per_label[current_label] += len(dataset[recording][0])
+            recording_per_label[current_label] += 1            
             for sublayer in range(len(last_layer_activity)):
-                batch_histogram = sum(last_layer_activity[sublayer][batch])
-                histograms[current_label][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram               
+                recording_histogram = sum(last_layer_activity[sublayer][recording])
+                histograms[current_label][n_basis*sublayer:n_basis*(sublayer+1)] += recording_histogram               
         for label in range(number_of_labels):
             normalized_histograms[label] = histograms[label]/input_spikes_per_label[label]
-            histograms[label] = histograms[label]/batch_per_label[label]
+            histograms[label] = histograms[label]/recording_per_label[label]
         self.histograms = histograms
         self.normalized_histograms = normalized_histograms
-        if verbose is True:
+        if self.verbose is True:
             print("Training ended, you can now look at the histograms with in the "+
                   "attribute .histograms and .normalized_histograms, or using "+
                   "the .plot_histograms method")
 
-    # Method for testing the histogram classification model as proposed in 
-    # HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
-    # https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=7508476
-    # =============================================================================
-    # dataset: the input dataset the network will respond to
-    # labels: the labels used for the classification task (positive integers from 0 to N)
-    # number_of_labels: the maximum number of labels of the dataset
-    # method : string with the method you want to use :
-    #          "CG" for Coniugate Gradient Descent
-    #          "Exp distance" for the model with lateral inhibition and explicit
-    #           exponential distance computing
-    # noise_ratio: The model responses can be mixed with noise, it can improve  
-    #               learning speed 
-    # sparsity_coeff: The model presents lateral inhibtion between the basis,
-    #                 it selects a winner depending on the responses, and feed 
-    #                 back it's activity timed minus the sparsity_coeff to 
-    #                 inhibit the neighbours. a value near one will result
-    #                 in a Winner-Takes-All mechanism like on the original 
-    #                 HOTS (For CG it's implemented as a weighted L1 coinstraint
-    #                 on the activations in the Error function)
-    # sensitivity : Each activation is computed as a guassian distance between 
-    #               a base and the upcoming timesurface, this coefficient it's
-    #               the gaussian 'variance' and it modulates cell selectivity
-    #               to their encoded feature (Feature present only on Exp distance)   
-    # verbose : If set to True the function will provide written feedback on the 
-    #           percentage of the dataset computed
-    # It returns the computed distances per batch (Euclidean, normalized Euclidean
-    # and Bhattacharyyan) and the predicted_labels per batch and per metric(distance)
+
     # =============================================================================      
     def histogram_classification_test(self, dataset, labels, number_of_labels, 
                                       method, noise_ratio, sparsity_coeff,
-                                         sensitivity, verbose=False):
+                                         sensitivity):
+        """
+        Method for training an histogram classification model as proposed in 
+        HOTS: A Hierarchy of Event-Based Time-Surfaces for Pattern Recognition
+        https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=7508476
+        Arguments:
+            dataset (nested lists) : the initial dataset used for learning
+            labels (list of int) : the labels used for the classification task (from 0 to number_of_labels-1)
+            number_of_labels (int) : the maximum number of labels of the dataset
+            method (string) : string with the method you want to use :
+                              "CG" for Coniugate Gradient Descent
+                              "Exp distance" for the model with lateral inhibition and explicit
+                              exponential distance computing
+                              base_norm : Select whether use L2 norm or threshold constraints on basis
+                              learning with the keywords "L2" "Thresh" 
+        
+            noise_ratio (float) : The model responses can be mixed with noise, it can improve  
+                           learning speed 
+            sparsity_coeff (float) : The model presents lateral inhibtion between the basis,
+                             it selects a winner depending on the responses, and feed 
+                             back it's activity timed minus the sparsity_coeff to 
+                             inhibit the neighbours. a value near one will result
+                             in a Winner-Takes-All mechanism like on the original 
+                             HOTS (For CG it's implemented as a weighted L1 coinstraint
+                             on the activations in the Error function)
+            sensitivity (float) : Each activation is computed as a guassian distance between 
+                                  a base and the upcoming timesurface, this coefficient it's
+                                  the gaussian 'variance' and it modulates cell selectivity
+                                  to their encoded feature (Feature present only on Exp distance)
+        Returns:
+            prediction_rates (list of float) : The prediction rates in decimal for 
+                                               euclidean distance, normalised 
+                                               euclidean disrance and bhattarchaya
+                                               distance
+            distances (nested lists of floats): The set of distances per each class 
+                                                of the test dataset and the computed signatures
+                                                
+            predicted_labels (list of int) : The list of predicted labels 
+        """
         net_activity = self.full_net_dataset_response(dataset, method, 
                                                       noise_ratio, 
                                                       sparsity_coeff,
-                                                      sensitivity,
-                                                      verbose)
+                                                      sensitivity)
         last_layer_activity = net_activity[-1]
         histograms = []
         normalized_histograms = []
-        n_basis = self.basis_number[-1]
+        n_basis = self.features_number[-1]
         # Normalization factor for building normalized histograms
-        input_spikes_per_batch = np.zeros(len(dataset))
-        for batch in range(len(dataset)):
+        input_spikes_per_recording = np.zeros(len(dataset))
+        for recording in range(len(dataset)):
             histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
             normalized_histograms.append(np.zeros(n_basis*(2**(self.layers-1))))
-        for batch in range(len(dataset)):
-            input_spikes_per_batch[batch] += len(dataset[batch][0])
+        for recording in range(len(dataset)):
+            input_spikes_per_recording[recording] += len(dataset[recording][0])
             for sublayer in range(len(last_layer_activity)):
-                batch_histogram = sum(last_layer_activity[sublayer][batch])
-                histograms[batch][n_basis*sublayer:n_basis*(sublayer+1)] += batch_histogram               
-        for batch in range(len(dataset)):
-            normalized_histograms[batch] = histograms[batch]/input_spikes_per_batch[batch]
+                recording_histogram = sum(last_layer_activity[sublayer][recording])
+                histograms[recording][n_basis*sublayer:n_basis*(sublayer+1)] += recording_histogram               
+        for recording in range(len(dataset)):
+            normalized_histograms[recording] = histograms[recording]/input_spikes_per_recording[recording]
         # compute the distances per each histogram from the models
         distances = []
         predicted_labels = []
-        for batch in range(len(dataset)):
-            single_batch_distances = []
+        for recording in range(len(dataset)):
+            single_recording_distances = []
             for label in range(number_of_labels):
                 single_label_distances = []  
-                single_label_distances.append(distance.euclidean(histograms[batch],self.histograms[label]))
-                single_label_distances.append(distance.euclidean(normalized_histograms[batch],self.normalized_histograms[label]))
-                Bhattacharyya_array = np.array([np.sqrt(a*b) for a,b in zip(normalized_histograms[batch], self.normalized_histograms[label])]) 
+                single_label_distances.append(distance.euclidean(histograms[recording],self.histograms[label]))
+                single_label_distances.append(distance.euclidean(normalized_histograms[recording],self.normalized_histograms[label]))
+                Bhattacharyya_array = np.array([np.sqrt(a*b) for a,b in zip(normalized_histograms[recording], self.normalized_histograms[label])]) 
                 single_label_distances.append(-np.log(sum(Bhattacharyya_array)))
-                single_batch_distances.append(single_label_distances)
-            single_batch_distances = np.array(single_batch_distances)
-            single_batch_predicted_labels = np.argmin(single_batch_distances, 0)
-            distances.append(single_batch_distances)
-            predicted_labels.append(single_batch_predicted_labels)
+                single_recording_distances.append(single_label_distances)
+            single_recording_distances = np.array(single_recording_distances)
+            single_recording_predicted_labels = np.argmin(single_recording_distances, 0)
+            distances.append(single_recording_distances)
+            predicted_labels.append(single_recording_predicted_labels)
         self.test_histograms = histograms
         self.test_normalized_histograms = normalized_histograms    
         # Computing the results
         eucl = 0
         norm_eucl = 0
         bhatta = 0
-        for i,true_label in enumerate(labels):
-            eucl += (predicted_labels[i][0] == true_label)/len(labels)
-            norm_eucl += (predicted_labels[i][1] == true_label)/len(labels)
-            bhatta += (predicted_labels[i][2] == true_label)/len(labels)
+        for recording,true_label in enumerate(labels):
+            eucl += (predicted_labels[recording][0] == true_label)/len(labels)
+            norm_eucl += (predicted_labels[recording][1] == true_label)/len(labels)
+            bhatta += (predicted_labels[recording][2] == true_label)/len(labels)
         prediction_rates = [eucl, norm_eucl, bhatta]
-        if verbose is True:
+        if self.verbose is True:
             print("Testing ended, you can also look at the test histograms with in"+
                   " the attribute .test_histograms and .test_normalized_histograms, "+
                   "or using the .plot_histograms method")
         return prediction_rates, distances, predicted_labels
 
-    # Method for plotting the histograms of the network, either result of train 
-    # or testing
-    # =============================================================================
-    # label_names : tuple containing the names of each label that will displayed
-    #               in the legend
-    # labels : list containing the labels of the test dataset used to generate
-    #          the histograms, if empty, the function will plot the class histograms
-    #          computed using .histogram_classification_train
     # =============================================================================
     def plot_histograms(self, label_names, labels=[]):
+        """
+        Method for plotting the histograms of the network, either result of train 
+        or testing
+        Arguments:
+            label_names (tuple of strings) : the names of each label that will displayed
+                                             in the legend
+            labels (list of int) : the labels of the test dataset used to generate
+                                   the histograms, if empty, the function will plot 
+                                   instead the class histograms computed using 
+                                   .histogram_classification_train
+        """
         if labels == []:
             hist = np.transpose(self.histograms)
             norm_hist = np.transpose(self.normalized_histograms)
@@ -1268,9 +1247,9 @@ class HOTS_Sparse_Net:
             norm_fig, norm_ax = plt.subplots()
             norm_ax.set_title("Test histogram based on normalized euclidean distance")
             custom_lines = [Line2D([0], [0], color="C"+str(label), lw=1) for label in range(len(label_names))]
-            for batch in range(len(labels)):
-                eucl_ax.plot(self.test_histograms[batch].transpose(),"C"+str(labels[batch]))
-                norm_ax.plot(self.test_normalized_histograms[batch].transpose(),"C"+str(labels[batch]))
+            for recording in range(len(labels)):
+                eucl_ax.plot(self.test_histograms[recording].transpose(),"C"+str(labels[recording]))
+                norm_ax.plot(self.test_normalized_histograms[recording].transpose(),"C"+str(labels[recording]))
             
             eucl_ax.legend(custom_lines,label_names)
             norm_ax.legend(custom_lines,label_names)

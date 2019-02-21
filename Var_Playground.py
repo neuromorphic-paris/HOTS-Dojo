@@ -29,7 +29,7 @@ sns.set(style="white")
 plt.style.use("dark_background")
 
 ### Selecting the dataset
-shuffle_seed = 192 # seed used for dataset shuffling, if set to 0 the process will be totally random
+shuffle_seed = 12 # seed used for dataset shuffling, if set to 0 the process will be totally random
 
 #%% Cards dataset
 # The number of cards recordings is not the same for every symbol, thus in order
@@ -68,10 +68,10 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [2,4]
+latent_variables = [4,8]
 surfaces_dimensions = [[11,11],[21,21]]
 taus = [1000,15000]
-learning_rate = [0.008,0.0008]
+learning_rate = [0.004,0.0008]
 
 first_layer_polarities = dataset_polarities
 
@@ -100,8 +100,8 @@ print("Learning elapsed time : "+str(elapsed_time))
 #                      used for decoding
 # =============================================================================
 
-layer = 1  
-variables_ind = [1,2] 
+layer = 0  
+variables_ind = [0,1] 
 variable_fix = 0 
                     
 Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
@@ -113,7 +113,7 @@ plt.pause(0.1)
 number_of_labels=len(legend)
 mlp_learning_rate = 0.01
 Net.mlp_classification_train(labels_learning,   
-                                   number_of_labels, mlp_learning_rate, dataset_learning)
+                                   number_of_labels, mlp_learning_rate)
 
 #%% Mlp classifier testing
 
@@ -122,7 +122,7 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 
 #%% Save network parameters
 now=datetime.datetime.now()
-file_name = "Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
+file_name = "1_L_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
     
 with open(parameter_folder+file_name, 'wb') as f:
     pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
