@@ -9,7 +9,7 @@ from Libs.Var_HOTS.Benchmark_Libs import param_load, bench, compute_m_v
 os.environ['MKL_NUM_THREADS'] = '1'
 
 # Simultaneus threads you want to utilise on your machine 
-threads = 50
+threads = 8
 
 # Number of runs 
 runs = 50
