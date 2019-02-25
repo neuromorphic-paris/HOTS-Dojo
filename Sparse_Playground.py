@@ -23,7 +23,7 @@ sns.set(style="white")
 plt.style.use("dark_background")
 
 ### Selecting the dataset
-shuffle_seed = 12 # seed used for dataset shuffling if set to 0 the process will be totally random
+shuffle_seed = 0 # seed used for dataset shuffling if set to 0 the process will be totally random
 
 #%% Cards dataset
 # The number of cards recordings is not the same for every symbol, thus in order

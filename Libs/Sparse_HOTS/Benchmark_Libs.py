@@ -17,12 +17,12 @@ def wrapper_learn_online(HOTS_Sparse_Net, dataset, method="Exp distance", base_n
                      learning_rate=[0,0,1], base_norm_coeff=0):
     HOTS_Sparse_Net.learn_online(dataset, method, base_norm, noise_ratio, sparsity_coeff,
                                  sensitivity, learning_rate, base_norm_coeff)
-    
+    return HOTS_Sparse_Net
 def wrapper_learn_offline(HOTS_Sparse_Net, dataset, sparsity_coeff, learning_rate,
                       max_steps, base_norm_coeff, precision):
     HOTS_Sparse_Net.learn_offline(dataset, sparsity_coeff, learning_rate,
                       max_steps, base_norm_coeff, precision)
-    
+    return HOTS_Sparse_Net
 
 def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_polarities,
           classification_type, threads, runs):
@@ -39,11 +39,11 @@ def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_p
         
         # check if the net is online or offline
         if learning_method=="learn_online":
-            Parallel(n_jobs=threads)(delayed(Nets[run].learn_online)(dataset=dataset[run][0],
-                  method=activation_method, base_norm=base_norm,
-                  noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
-                  sensitivity=sensitivity,
-                  learning_rate=learning_rate)for run in range(runs))
+            Nets = Parallel(n_jobs=threads)(delayed(wrapper_learn_online)(Nets[run],dataset=dataset[run][0],
+                      method=activation_method, base_norm=base_norm,
+                      noise_ratio=noise_ratio, sparsity_coeff=sparsity_coeff,
+                      sensitivity=sensitivity,
+                      learning_rate=learning_rate)for run in range(runs))
             if classification_type is True:
                 for run in range(runs):
                     Nets[run].histogram_classification_train(dataset[run][0], dataset[run][1],   
@@ -62,7 +62,7 @@ def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_p
                     single_net_results.append([prediction_rate])
 
         if learning_method=="learn_offline":
-            Parallel(n_jobs=threads)(delayed(Nets[run].learn_offline)(dataset[run][0], sparsity_coeff, learning_rate,
+            Nets = Parallel(n_jobs=threads)(delayed(wrapper_learn_offline)(Nets[run], dataset[run][0], sparsity_coeff, learning_rate,
                               additional_save[0], additional_save[1], additional_save[2]) for run in range(runs))
             if classification_type is True:
                 for run in range(runs):

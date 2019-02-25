@@ -37,7 +37,7 @@ dataset = Parallel(n_jobs=threads)(delayed(Cards_loader)(data_folder, learning_s
                                   testing_set_length, shuffle_seed) for run in range(runs))
 
 #%% Load Networks parameter saved from the Playground
-file_names = ["1_L_My_HOTS_Parameters_2019-02-20_15:14:23.008572.pkl","1_L_Original_HOTS_Parameters_2019-02-20_15:14:37.654784.pkl", "1_L_Compressive_HOTS_Parameters_2019-02-20_15:14:47.844666.pkl"] 
+file_names = ["1_L_My_HOTS_Parameters_2019-02-20_15:14:23.008572.pkl","1_L_Original_HOTS_Parameters_2019-02-20_15:14:37.654784.pkl"]
 number_of_nets = len(file_names)
 nets_parameters = Parallel(n_jobs=threads)(delayed(param_load)(parameter_folder+file_names[net]) for net in range(number_of_nets))   
 
@@ -49,7 +49,7 @@ elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
 
 #%% Compute mean and variance of the scores of each nework
-
+ 
 mean,var = compute_m_v(bench_results)
 
 #%% Save Results

@@ -2,10 +2,10 @@ import pickle
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 #%% Load Results
-res_file_name='2019-01-11 13:16:09.768874.pkl'
+res_file_name='1_L_Original_HOTS_Results_2019-02-20_15:14:37.654784.pkl'
 result_folder = "Results/Cards/"
 with open(result_folder+res_file_name, 'rb') as f:
-       [file_names,number_of_nets,mean,var,bench_results] = pickle.load(f)
+       [mean,var,bench_results]= pickle.load(f)
    
 #%% Plots
 x = range(3)
