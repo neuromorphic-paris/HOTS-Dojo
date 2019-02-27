@@ -68,9 +68,9 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [4,8]
-surfaces_dimensions = [[11,11],[21,21]]
-taus = [1000,15000]
+latent_variables = [4,4]
+surfaces_dimensions = [[7,7],[11,11]]
+taus = [1000,10000]
 learning_rate = [0.004,0.0008]
 
 first_layer_polarities = dataset_polarities
@@ -100,7 +100,7 @@ print("Learning elapsed time : "+str(elapsed_time))
 #                      used for decoding
 # =============================================================================
 
-layer = 0  
+layer = 1  
 variables_ind = [0,1] 
 variable_fix = 0 
                     
@@ -122,7 +122,7 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 
 #%% Save network parameters
 now=datetime.datetime.now()
-file_name = "1_L_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
+file_name = "2_L_Same_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
     
 with open(parameter_folder+file_name, 'wb') as f:
     pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
