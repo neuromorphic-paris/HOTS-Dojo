@@ -157,8 +157,11 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate):
     outputs = decoder(encoder(inputs)[2])
     vae = Model(inputs, outputs, name='vae_mlp')
     
+    L2_z = K.sum(K.square(z_mean),axis=-1)
+    L2_inputs = K.sum(K.square(inputs),axis=-1)
+    
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs)
+    reconstruction_loss = mse(inputs, outputs) + 0.5*K.abs(L2_z-L2_inputs)/(L2_inputs+0.01)
 
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)

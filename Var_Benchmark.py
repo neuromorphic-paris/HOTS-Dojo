@@ -37,7 +37,7 @@ dataset = Parallel(n_jobs=threads)(delayed(Cards_loader)(data_folder, learning_s
                                   testing_set_length, shuffle_seed) for run in range(runs))
 
 #%% Load Networks parameter saved from the Playground
-file_names = ["1_L_Same_Variational_HOTS_Parameters_2019-02-27_10:35:22.777980.pkl","2_L_Same_Variational_HOTS_Parameters_2019-02-27_10:35:48.844075.pkl"] 
+file_names = ["2_L_Same_Variational_HOTS_Parameters_2019-03-01_16:34:33.939059.pkl","1_L_Variational_HOTS_Parameters_2019-02-20_15:31:50.906390.pkl","1_L_Same_Variational_HOTS_Parameters_2019-03-01_16:35:37.805110.pkl"] 
 number_of_nets = len(file_names)
 nets_parameters = Parallel(n_jobs=threads)(delayed(param_load)(parameter_folder+file_names[net]) for net in range(number_of_nets))   
 
