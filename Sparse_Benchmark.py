@@ -9,10 +9,10 @@ from Libs.Sparse_HOTS.Benchmark_Libs import param_load, bench, compute_m_v
 os.environ['MKL_NUM_THREADS'] = '1'
 
 # Simultaneus threads you want to utilise on your machine 
-threads = 50
+threads = 10
 
 # Number of runs 
-runs = 50
+runs = 10
 
 # I won't use polarity information because is not informative for the given task
 first_layer_polarities = 1
@@ -37,7 +37,7 @@ dataset = Parallel(n_jobs=threads)(delayed(Cards_loader)(data_folder, learning_s
                                   testing_set_length, shuffle_seed) for run in range(runs))
 
 #%% Load Networks parameter saved from the Playground
-file_names = ["1_L_Compressive_HOTS_Parameters_2019-02-20_15:14:47.844666.pkl"]
+file_names = ["1_L_Compressive_HOTS_Parameters_2019-03-07_17:28:50.024671.pkl","1_L_My_HOTS_Parameters_2019-03-07_14:22:44.799756.pkl","1_L_Original_HOTS_Parameters_2019-03-07_14:46:49.705022.pkl"]
 number_of_nets = len(file_names)
 nets_parameters = Parallel(n_jobs=threads)(delayed(param_load)(parameter_folder+file_names[net]) for net in range(number_of_nets))   
 
