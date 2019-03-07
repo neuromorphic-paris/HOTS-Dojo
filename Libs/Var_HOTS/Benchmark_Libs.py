@@ -5,9 +5,9 @@ from Libs.Var_HOTS.Var_HOTS_Network import Var_HOTS_Net
 def param_load(file_name):
     with open(file_name, 'rb') as f:
        [latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
-                 mlp_learning_rate] = pickle.load(f)
+                 coding_costraint, mlp_learning_rate] = pickle.load(f)
     return [latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
-                 mlp_learning_rate]
+                 coding_costraint, mlp_learning_rate]
 
 
 def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_polarities,
@@ -16,7 +16,7 @@ def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_p
     for net in range(number_of_nets):
         single_net_results = []
         [latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
-                 mlp_learning_rate] = nets_parameters[net]
+         coding_costraint, mlp_learning_rate] = nets_parameters[net]
         for run in range(runs) :             
             dataset_learning, labels_learning, dataset_testing, labels_testing = dataset[run]
             
@@ -24,7 +24,7 @@ def bench(dataset,nets_parameters,number_of_nets,number_of_labels, first_layer_p
             Net = Var_HOTS_Net(latent_variables, surfaces_dimensions, taus, first_layer_polarities,
                    threads=threads)
         
-            Net.learn(dataset=dataset_learning, learning_rate=learning_rate)
+            Net.learn(dataset=dataset_learning, learning_rate=learning_rate, coding_costraint=coding_costraint)
             
             Net.mlp_classification_train(labels_learning,   
                                    number_of_labels, mlp_learning_rate)

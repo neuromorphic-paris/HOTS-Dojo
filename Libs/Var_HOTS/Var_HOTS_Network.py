@@ -76,7 +76,7 @@ class Var_HOTS_Net:
 
     # Method for learning
     # =============================================================================        
-    def learn(self, dataset, learning_rate): 
+    def learn(self, dataset, learning_rate, coding_costraint = 0.08): 
         """
         The method is full online but it espects to work on an entire dataset
         at once to be more similiar in structure to its offline counterpart.
@@ -86,7 +86,10 @@ class Var_HOTS_Net:
         Arguments:
             dataset (nested lists) : the initial dataset used for learning
             learning_rate (float) : It's the learning rate of ADAM online optimization                 
-
+            coding_costraint (float) : a Lagrange multiplier to constraint the autoencoders
+                                       to move low active time surface rapresentation to smaller 
+                                       absolute values of the latent variables (wich is fundamental 
+                                       for data encoding with timesurfaces)
         
         """
         # The list of all data batches to currently process
@@ -99,9 +102,10 @@ class Var_HOTS_Net:
             new_data = []
             all_surfaces = []
             # Create the varational autoencoder for this layer
-            intermediate_dim = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][0]
+            #intermediate_dim = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][0]
+            intermediate_dim = 40
             self.vaes.append(create_vae(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
-                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer]))
+                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
             batch_size = 500
@@ -272,7 +276,7 @@ class Var_HOTS_Net:
         processed_labels = keras.utils.to_categorical(processed_labels, num_classes = number_of_labels)
         last_layer_activity = np.concatenate(last_layer_activity)
         n_latent_var = self.latent_variables[-1]
-        self.mlp = create_mlp(input_size=n_latent_var,hidden_size=120, output_size=number_of_labels, 
+        self.mlp = create_mlp(input_size=n_latent_var,hidden_size=50, output_size=number_of_labels, 
                               learning_rate=learning_rate)
         self.mlp.summary()
         self.mlp.fit(np.array(last_layer_activity), np.array(processed_labels),
@@ -284,7 +288,6 @@ class Var_HOTS_Net:
 
     # Method for testing the mlp classification model
     # =============================================================================
-    # =============================================================================      
     def mlp_classification_test(self, labels, number_of_labels, dataset=[]):
         """
         Method to test a simple mlp, to a classification task, to test the feature 
@@ -322,7 +325,7 @@ class Var_HOTS_Net:
         return prediction_rate, predicted_labels, predicted_labels_ev
 
 
-            
+    # =============================================================================      
     def plot_vae_decode_2D(self, layer, variables_ind, variable_fix=0):
         """
         Plots reconstructed timesurfaces as function of 2-dim latent vector
@@ -378,7 +381,8 @@ class Var_HOTS_Net:
         plt.ylabel("z["+str(variables_ind[1])+"]")
         plt.imshow(figure)
         plt.show()
-        
+    
+    # =============================================================================          
     def plot_vae_space_2D(self, layer, variables_ind, label_names, labels, dataset=[]):
         """
         Plots latent rapresentation of a dataset for a given layer, or the latest
@@ -423,6 +427,25 @@ class Var_HOTS_Net:
         plt.ylabel("z["+str(variables_ind[1])+"]")
         plt.show()
     
+    # UNDER WORK #
+    # =============================================================================      
+    def reconstruct(self, dataset, recording, beg_ind, end_ind, xdim, ydim):
+        data = [dataset[recording][0][beg_ind:end_ind],dataset[recording][1][beg_ind:end_ind],dataset[recording][2][beg_ind:end_ind]]      
+        input_surfaces=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                     self.surfaces_dimensions[0][1], [data[0][event_ind],data[1][event_ind],data[2][event_ind]],
+                     self.taus[0], data, self.polarities[0], minv=0.1) for event_ind in range(end_ind-beg_ind))   
+        original_image = np.zeros([ydim+self.surfaces_dimensions[0][1],xdim+self.surfaces_dimensions[0][0]])
+        mean_norm = np.zeros([ydim+self.surfaces_dimensions[0][1],xdim+self.surfaces_dimensions[0][0]])
+        xoff = self.surfaces_dimensions[0][0]//2
+        yoff = self.surfaces_dimensions[0][1]//2  
+        for i in range(len(data[0])):
+            x0 = data[1][i,0]
+            y0 = data[1][i,1]
+            original_image[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)] += input_surfaces[i].reshape(self.surfaces_dimensions[0][1],self.surfaces_dimensions[0][0])
+            mean_norm[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)]  += input_surfaces[i].reshape(self.surfaces_dimensions[0][1],self.surfaces_dimensions[0][0]).astype(bool)
+        plt.imshow(original_image)
+        
+        
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED METHODS GO TO SLEEP, ##
               ##  UNTIL A LAZY DEVELOPER WILL DECIDE WHAT TO DO WITH THEM    ##
         # =============================================================================

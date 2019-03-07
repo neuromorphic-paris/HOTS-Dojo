@@ -63,7 +63,7 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # 
 # =============================================================================
 
-features_number = [8]
+features_number = [12]
 surfaces_dimensions = [[11,11]]
 taus = [1000]
 
@@ -87,7 +87,7 @@ start_time = time.time()
 
 sparsity_coeff = [1, 0.6, 900]
 learning_rate = [0.075, 0.0012, 900]
-noise_ratio = [1, 0, 300]
+noise_ratio = [1, 0, 900]
 sensitivity = [0.05, 0.12, 1200]
 
 Net.learn_online(dataset=dataset_learning,
@@ -110,7 +110,7 @@ start_time = time.time()
 
 sparsity_coeff = [1, 1, 10000]
 learning_rate = [0.075, 0.0012, 900]
-noise_ratio = [1, 0, 300]
+noise_ratio = [1, 0, 900]
 sensitivity = [1, 1, 1] # This parameter is a name place holder
 
 Net.learn_online(dataset=dataset_learning,
@@ -157,7 +157,7 @@ if learning_method=="learn_offline": # The parameters are fixed
     sensitivity_mlp = 0
     
 number_of_labels=len(legend)
-mlp_learning_rate = 0.001
+mlp_learning_rate = 0.01
 Net.mlp_classification_train(dataset_learning, labels_learning, number_of_labels, mlp_learning_rate, activation_method,
                                 noise_ratio_mlp, sparsity_coeff_mlp, sensitivity_mlp)
 

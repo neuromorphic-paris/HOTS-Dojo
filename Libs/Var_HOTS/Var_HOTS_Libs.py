@@ -110,7 +110,7 @@ def create_mlp(input_size, hidden_size, output_size, learning_rate):
     
 
 # Let's try with a small predefined network    
-def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate):
+def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding_costraint):
     """
     Function used to create a small autoencoder used each layer of Var HOTS
     Arguments :
@@ -118,6 +118,10 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate):
         latent_dim (int) : size of the output layer
         intermediate_dim (int) : size of the hidden layer
         learning_rate (int) : the learning rate for the optiomization alg.
+        coding_costraint (float) : a Lagrange multiplier to constraint the autoencoders
+                                   to move low active time surface rapresentation to smaller 
+                                   absolute values of the latent variables (wich is fundamental 
+                                   for data encoding with timesurfaces)
     Returns :
         vae (keras model) : the freshly baked network
         encoder (keras model) : the freshly baked encoder
@@ -159,9 +163,10 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate):
     
     L2_z = K.sum(K.square(z_mean),axis=-1)
     L2_inputs = K.sum(K.square(inputs),axis=-1)
-    
+
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs) + 0.5*K.abs(L2_z-L2_inputs)/(L2_inputs+0.01)
+    coding_costraint = 0.08
+    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_z-L2_inputs)/(L2_inputs+0.01)
 
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)

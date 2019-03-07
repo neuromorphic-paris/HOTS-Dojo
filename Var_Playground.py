@@ -68,10 +68,11 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [4]
-surfaces_dimensions = [[17,17]]
-taus = [11000]
-learning_rate = [0.004,0.0008]
+latent_variables = [6,8]
+surfaces_dimensions = [[11,11],[15,15]]
+taus = [1000,5000]
+learning_rate = [0.008,0.008]
+coding_costraint = 0.09
 
 first_layer_polarities = dataset_polarities
 
@@ -84,7 +85,7 @@ Net = Var_HOTS_Net(latent_variables, surfaces_dimensions, taus, first_layer_pola
 
 start_time = time.time()
 
-Net.learn(dataset=dataset_learning, learning_rate=learning_rate)
+Net.learn(dataset=dataset_learning, learning_rate=learning_rate, coding_costraint=coding_costraint)
 
 elapsed_time = time.time()-start_time
 print("Learning elapsed time : "+str(elapsed_time))
@@ -111,7 +112,7 @@ plt.pause(0.1)
 #%% Mlp classifier training
 
 number_of_labels=len(legend)
-mlp_learning_rate = 0.01
+mlp_learning_rate = 0.001
 Net.mlp_classification_train(labels_learning,   
                                    number_of_labels, mlp_learning_rate)
 
@@ -122,11 +123,11 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 
 #%% Save network parameters
 now=datetime.datetime.now()
-file_name = "1_L_Same_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
+file_name = "2_L_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
     
 with open(parameter_folder+file_name, 'wb') as f:
     pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
-                 mlp_learning_rate], f) 
+                 coding_costraint, mlp_learning_rate], f) 
 
 #%% Histogram classifier training, not used anymore
 
