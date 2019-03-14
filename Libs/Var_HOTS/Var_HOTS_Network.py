@@ -17,8 +17,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 # Homemade Fresh Libraries like Gandma taught
-from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations
-from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_event
+from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations, plot_reconstruct
+from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_event, Reverse_Time_Surface_event
 
 
 # Class for Var_HOTS_Net
@@ -434,18 +434,78 @@ class Var_HOTS_Net:
         input_surfaces=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                      self.surfaces_dimensions[0][1], [data[0][event_ind],data[1][event_ind],data[2][event_ind]],
                      self.taus[0], data, self.polarities[0], minv=0.1) for event_ind in range(end_ind-beg_ind))   
-        original_image = np.zeros([ydim+self.surfaces_dimensions[0][1],xdim+self.surfaces_dimensions[0][0]])
-        mean_norm = np.zeros([ydim+self.surfaces_dimensions[0][1],xdim+self.surfaces_dimensions[0][0]])
-        xoff = self.surfaces_dimensions[0][0]//2
-        yoff = self.surfaces_dimensions[0][1]//2  
-        for i in range(len(data[0])):
-            x0 = data[1][i,0]
-            y0 = data[1][i,1]
-            original_image[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)] += input_surfaces[i].reshape(self.surfaces_dimensions[0][1],self.surfaces_dimensions[0][0])
-            mean_norm[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)]  += input_surfaces[i].reshape(self.surfaces_dimensions[0][1],self.surfaces_dimensions[0][0]).astype(bool)
-        plt.imshow(original_image)
+        plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
+        [predicted_surfaces,predicted_data]=self.predict(data,xdim,ydim)       
+        plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,predicted_data)
+        return [predicted_surfaces,predicted_data]
         
+    def predict(self, input_data, xdim, ydim):
+
+        layer_data=input_data
+                
+        for layer in range(self.layers):
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            batch_size = 250
+            n_batch = len(layer_data[0]) // batch_size
+            # Cut the excess data in the first layer : 
+            if layer == 0 :
+                layer_data[0]=layer_data[0][:n_batch*batch_size]
+                layer_data[1]=layer_data[1][:n_batch*batch_size]
+                layer_data[2]=layer_data[2][:n_batch*batch_size]
+                event = [[layer_data[0][event_ind],
+                          layer_data[1][event_ind],
+                          layer_data[2][event_ind]]for event_ind in range(n_batch*batch_size)] 
+            else :
+                event = [[layer_data[0][event_ind],
+                          layer_data[1][event_ind],
+                          layer_data[2][event_ind],
+                          layer_data[3][event_ind]]for event_ind in range(n_batch*batch_size)] 
+
+            # The multiple event polarities are all synchonized in the layers after the first.
+            # As a single time surface is build on all polarities, there is no need to build a time 
+            # surface per each event with a different polarity and equal time stamp, thus only 
+            # a fraction of the events are extracted here
+            if layer != 0 :
+                recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                    self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                    self.taus[layer], layer_data.copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch*batch_size,self.polarities[layer]))
+            else:
+                recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                    self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                    self.taus[layer], layer_data.copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
+            recording_results, _, _ = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
+            if layer != 0:
+                new_data=events_from_activations(recording_results, [layer_data[0][range(0,len(layer_data[0]),self.polarities[layer])],
+                                                                            layer_data[1][range(0,len(layer_data[0]),self.polarities[layer])]])
+            else:
+                new_data=events_from_activations(recording_results, layer_data)
+            layer_data=new_data
+        latent_activity = recording_results
+        for layer in range(self.layers-1,-1,-1):
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            batch_size = 250
+            # These are the reference frames, only timestamps and position are required
+            # As multiple activations generates multiple equal events with different polarities
+            # only one is used as a reference
+            event = [[layer_data[0][event_ind],
+                      layer_data[1][event_ind]] for event_ind in range(0,len(layer_data[0]),self.latent_variables[layer])] 
+            decoding_surfaces = self.vaes[layer][2].predict(np.array(latent_activity), batch_size=batch_size)
+            events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                    self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                    decoding_surfaces[event_ind], self.polarities[layer]) for event_ind in range(len(event)))
+            # Concatenating everythong to have a structure similiar to layer_data
+            new_data = events[0]
+            for ind in range(1,len(events)):
+                new_data = [np.concatenate([new_data[0],events[ind][0]]),
+                            np.concatenate([new_data[1],events[ind][1]]),
+                            np.concatenate([new_data[2],events[ind][2]]),
+                            np.concatenate([new_data[3],events[ind][3]])]
+            layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2]),np.array(new_data[3])]
+            latent_activity = [[new_data[3][(ind*self.polarities[layer])+pol]for pol in range(self.polarities[layer])]for ind in range(len(new_data[3])//self.polarities[layer])]
         
+        return decoding_surfaces, layer_data
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED METHODS GO TO SLEEP, ##
               ##  UNTIL A LAZY DEVELOPER WILL DECIDE WHAT TO DO WITH THEM    ##
         # =============================================================================

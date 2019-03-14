@@ -180,7 +180,17 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     
     return vae, encoder, decoder
 
-
+def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
+    original_image = np.zeros([ydim+surfaces_dimensions[0][1],xdim+surfaces_dimensions[0][0]])
+    mean_norm = np.zeros([ydim+surfaces_dimensions[0][1],xdim+surfaces_dimensions[0][0]])
+    xoff = surfaces_dimensions[0][0]//2
+    yoff = surfaces_dimensions[0][1]//2  
+    for i in range(len(input_events[0])):
+        x0 = input_events[1][i,0]
+        y0 = input_events[1][i,1]
+        original_image[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
+        mean_norm[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
+    plt.imshow(original_image)
 
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##

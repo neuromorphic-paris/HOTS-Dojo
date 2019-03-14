@@ -129,6 +129,11 @@ with open(parameter_folder+file_name, 'wb') as f:
     pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
                  coding_costraint, mlp_learning_rate], f) 
 
+#%% Prediction
+from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
+[predicted_surfaces,predicted_data]=Net.reconstruct(dataset_learning, 6, 0, 1000, 35, 35)
+Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
+
 #%% Histogram classifier training, not used anymore
 
 #number_of_labels=len(legend)

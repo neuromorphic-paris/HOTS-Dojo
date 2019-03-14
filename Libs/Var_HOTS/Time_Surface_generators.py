@@ -72,8 +72,8 @@ def Time_Surface_event(xdim, ydim, event, timecoeff, dataset, num_polarities, mi
     
     Arguments : 
         ydim,xdim (int) : dimensions of the timesurface
-        event (nested lists) : single event defined as [timestamp, [x, y]]. It is the reference even 
-                for the time surface
+        event (nested lists) : single event defined as [timestamp, [x, y]]. It is the reference event 
+                for the time surface building
         timecoeff (float) : the time coeff expressing the time decay
         dataset (nested lists) : dataset containing the events, a list where dataset[0] contains the 
                    timestamps as microseconds, and dataset[1] contains [x,y] pixel positions 
@@ -81,7 +81,7 @@ def Time_Surface_event(xdim, ydim, event, timecoeff, dataset, num_polarities, mi
         minv (float) : hardtreshold for the time surface, values smaller than minv will be
                removed from the result 
     Return : 
-        tsurface (2D numpy matrix) : matrix of size num_polarities*xdim*ydim 
+        tsurface (1D numpy array) : array of size num_polarities*xdim*ydim 
     
     """
     # If the spiking activity has rates, tmpdata will be longer
@@ -138,3 +138,26 @@ def Time_Surface_event(xdim, ydim, event, timecoeff, dataset, num_polarities, mi
     
     return tsurface
 
+def Reverse_Time_Surface_event(xdim, ydim, event, tsurface, num_polarities):
+    """
+    Function computing the events composing a single timesurface, as the opposite 
+    of the function Time_Surface_event, this function serve the pourpose to decode 
+    back the surfaces built by a devoder in the events that generated them
+    
+    Arguments  : 
+        ydim,xdim (int) : dimensions of the timesurface
+        event (nested lists) : single event defined as [timestamp, [x, y]]. It is the reference event
+                               used for the time surface building
+        tsurface (1D numpy array) : array of size num_polarities*xdim*ydim         
+        num_polarities (int) : total number of labels or polarities of the time surface 
+    """
+    ref_timestamp=event[0]
+    x0=event[1][0]
+    y0=event[1][1]
+    timestamps=ref_timestamp*np.ones(len(tsurface))
+    polarities=np.array([pol for pol in range(num_polarities) for ind in range(xdim*ydim)])    
+    positions=[[x+x0,y+y0] for pol in range(num_polarities) for x in range(-(xdim-1)//2,(xdim+1)//2) for y in range(-(ydim-1)//2,(ydim+1)//2)]
+    rates=[tsurface[pos+(pol*xdim*ydim)] for pol in range(num_polarities) for pos in range(xdim*ydim)]
+    events=[timestamps, positions, polarities, rates]
+    
+    return events

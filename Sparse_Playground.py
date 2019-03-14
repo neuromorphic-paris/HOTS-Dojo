@@ -63,9 +63,9 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # 
 # =============================================================================
 
-features_number = [12]
-surfaces_dimensions = [[11,11]]
-taus = [1000]
+features_number = [16,32]
+surfaces_dimensions = [[11,11],[13,13]]
+taus = [1000,5000]
 
 # I won't use polarity information because is not informative for the given task
 first_layer_polarities = 1
@@ -198,7 +198,7 @@ plt.show()
 
 #%% Plot Basis 
 
-layer = 0
+layer = 1
 sublayer = 0
 Net.plot_basis(layer, sublayer)
 plt.show()       

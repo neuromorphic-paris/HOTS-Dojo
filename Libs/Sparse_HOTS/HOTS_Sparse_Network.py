@@ -207,7 +207,7 @@ class HOTS_Sparse_Net:
                 sensitivity_evolution = exp_decay(sensitivity[0], sensitivity[1], sensitivity[2], time)
                 
                 # Generate and allocate plots for online plotting
-                if self.verbose is True:
+                if self.verbose is True and layer==1:
                     # Building a list to contain the basis at each run and the original timesurface (the whole picture)
                     # at the position 0
                     timesurfaces_list = [Time_Surface_all(xdim=35, ydim=35, timestamp=dataset[0][0][-1], timecoeff=self.taus[0], dataset=dataset[0], num_polarities=1, minv=0.1, verbose=False)]
@@ -223,7 +223,7 @@ class HOTS_Sparse_Net:
                 time = 0
                 sub_layer_surfaces = []
                 sub_layer_reference_events = []
-                sub_layer_errors = []
+                sub_layer_errors = [] 
            
                 for recording in range(len(input_data[sublayer])):
                     recording_surfaces = []
@@ -268,7 +268,7 @@ class HOTS_Sparse_Net:
                     if time!=0:                        
                         self.evolution_save_point(layer, sublayer, recording, noise_evolution[time-1], sparsity_evolution[time-1], sensitivity_evolution[time-1], learning_evolution[time-1])
                     # Update plots
-                    if self.verbose is True:    
+                    if self.verbose is True and layer==1:    
                         timesurfaces_list[0]=Time_Surface_all(xdim=35, ydim=35, timestamp=dataset[recording][0][-1], timecoeff=self.taus[0], dataset=dataset[recording], num_polarities=1, minv=0.1, verbose=False)
                         for i in range(len(self.basis[layer][sublayer])):
                             timesurfaces_list[i+1]=self.basis[layer][sublayer][i]
@@ -277,7 +277,7 @@ class HOTS_Sparse_Net:
                     sub_layer_surfaces.append(recording_surfaces)
                     sub_layer_reference_events.append(recording_reference_events)
                 # Close plots before displaying next set of basis
-                if self.verbose is True:
+                if self.verbose is True and layer==1:
                     for i in range(len(live_figures)):
                         plt.close(fig=live_figures[i])
                     live_axes.clear()
