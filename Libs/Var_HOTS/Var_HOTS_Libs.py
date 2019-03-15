@@ -17,6 +17,7 @@ from keras.losses import mse
 from keras.utils import plot_model
 from keras import backend as K
 from keras import optimizers
+from itertools import compress
 
 import numpy as np 
 import matplotlib.pyplot as plt
@@ -86,6 +87,64 @@ def events_from_activations(activations, events):
 
     return [out_timestamps, out_positions, out_polarities, out_rates]
 
+def event_cutter(event_list, num_polarities, timecoeff, minv, xdim, ydim, tsurface_dim):
+    """
+    In the reconstruction problem we have to move from timesurfaces to events.
+    The concept of time surface is reduntant (as the same event might appear
+    in different time surfaces at different moments), thus the events generated 
+    by the stacked decoder tend to increase exponentially even with few layer
+    this function helps too cut away redundant information, by comparing time stamps
+    and rate. It then cuts the original event_list
+    Arguments :
+        event_list (nested lists) : A list containing a list of all timestamps, 
+                                    a list of positions, a list of polarities,
+                                    and a list of rates
+        num_polarities (int) : the number of expected polarities in the net
+        timecoeff (float) : the coefficient used to build the timesurfaces for 
+                            this layer
+        minv (float) : the minimum float number at with two events of different 
+                       timesurfaces can be considered the same one (as the surfaces)
+                       are generated, equality is not expected
+       xdim (int), ydim (int) : dimensions of the entireplane for the dataset
+                                generated in this layer
+       tsurface_dim (list od 2 int) : dimensions of a single timesurface         
+
+    Returns :
+        event_list (nested lists) : The cut down version of the input event_list
+    """
+    # Let's create the lookup tables to store all events
+    # one per each per type (timestamps and rate)
+    # the positions will be encoded in the actual positions of values each matrix
+    # only a single polarity is taken in account as i always need a full set of
+    # syncronous polarities to feed the previous layer (except for the first but 
+    # this function won't be called for that)
+    list_dim=np.max(event_list[1])
+    timestamp_table=np.nan*np.ones([list_dim+1,list_dim+1]) 
+    rate_table= np.nan*np.ones([list_dim+1,list_dim+1]) 
+    # in this list I will save index of the events I want to save with ones
+    # while with 0 I will represent the events that are going to be ereased 
+    check_list = np.ones(len(event_list[0]))
+    # the for loop proceeds backwards
+    for ind in range(len(event_list[0])-1,-1,-num_polarities):
+        current_pos = event_list[1][ind]
+        if not np.isnan(timestamp_table[current_pos[0],current_pos[1]]) or current_pos[0]<tsurface_dim[0]//2 \
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim+tsurface_dim[1]//2 :
+            actual_rate = event_list[3][ind]
+            predicted_rate = rate_table[current_pos[0],current_pos[1]]*np.exp((event_list[0][ind]-timestamp_table[current_pos[0],current_pos[1]])/timecoeff)
+            if np.abs(actual_rate-predicted_rate)<=minv or current_pos[0]<tsurface_dim[0]//2 \
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim+tsurface_dim[1]//2 :
+                check_list[ind-num_polarities+1:ind+1]=0
+            else:
+                timestamp_table[current_pos[0],current_pos[1]]=event_list[0][ind]
+                rate_table[current_pos[0],current_pos[1]]=event_list[3][ind]
+        else:
+            timestamp_table[current_pos[0],current_pos[1]]=event_list[0][ind]
+            rate_table[current_pos[0],current_pos[1]]=event_list[3][ind]
+    event_list=[list(compress(event_list[0], check_list)),list(compress(event_list[1], check_list)),
+                list(compress(event_list[2], check_list)),list(compress(event_list[3], check_list))]
+    return event_list
 # =============================================================================
 def create_mlp(input_size, hidden_size, output_size, learning_rate):
     """
@@ -190,6 +249,7 @@ def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
         y0 = input_events[1][i,1]
         original_image[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
         mean_norm[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
+    plt.figure()
     plt.imshow(original_image)
 
 

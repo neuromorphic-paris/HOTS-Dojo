@@ -161,3 +161,29 @@ def Reverse_Time_Surface_event(xdim, ydim, event, tsurface, num_polarities):
     events=[timestamps, positions, polarities, rates]
     
     return events
+
+def Reverse_Time_Surface_event_no_rate(xdim, ydim, event, tsurface, timecoeff, num_polarities):
+    """
+    Function computing the events composing a single timesurface, as the opposite 
+    of the function Time_Surface_event, this function serve the pourpose to decode 
+    back the surfaces built by a devoder in the events that generated them.
+    This function doesn't expect rate
+    
+    Arguments  : 
+        ydim,xdim (int) : dimensions of the timesurface
+        event (nested lists) : single event defined as [timestamp, [x, y]]. It is the reference event
+                               used for the time surface building
+        tsurface (1D numpy array) : array of size num_polarities*xdim*ydim  
+        timecoeff (float) : the coefficient used to build the timesurfaces for 
+                            this layer
+        num_polarities (int) : total number of labels or polarities of the time surface 
+    """
+    ref_timestamp=event[0]
+    x0=event[1][0]
+    y0=event[1][1]
+    polarities=np.array([pol for pol in range(num_polarities) for ind in range(xdim*ydim)])    
+    positions=[[x+x0,y+y0] for pol in range(num_polarities) for x in range(-(xdim-1)//2,(xdim+1)//2) for y in range(-(ydim-1)//2,(ydim+1)//2)]
+    timestamps=ref_timestamp+timecoeff*np.log([tsurface[pos+(pol*xdim*ydim)] for pol in range(num_polarities) for pos in range(xdim*ydim)])
+    events=[timestamps, positions, polarities]
+    
+    return events
