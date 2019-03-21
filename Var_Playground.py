@@ -72,7 +72,7 @@ latent_variables = [6,8]
 surfaces_dimensions = [[11,11],[15,15]]
 taus = [1000,5000]
 learning_rate = [0.008,0.008]
-coding_costraint = 0.09
+coding_costraint = 0.001
 
 first_layer_polarities = dataset_polarities
 
@@ -101,10 +101,12 @@ print("Learning elapsed time : "+str(elapsed_time))
 #                      used for decoding
 # =============================================================================
 
-layer = 0
+layer = 1
 variables_ind = [0,1] 
 variable_fix = 0 
-                    
+
+Net.plot_vae_decode_2D(0, variables_ind, variable_fix)
+    
 Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
 Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning)
 plt.pause(0.1)
@@ -122,17 +124,18 @@ prediction_rate, predicted_labels, predicted_labels_ev = Net.mlp_classification_
 print('Prediction rate is '+str(prediction_rate*100)+'%')
 
 #%% Save network parameters
-now=datetime.datetime.now()
-file_name = "2_L_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
-    
-with open(parameter_folder+file_name, 'wb') as f:
-    pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
-                 coding_costraint, mlp_learning_rate], f) 
+#now=datetime.datetime.now()
+#file_name = "2_L_Variational_HOTS_Parameters_"+str(now).replace(" ","_")+".pkl"
+#    
+#with open(parameter_folder+file_name, 'wb') as f:
+#    pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
+#                 coding_costraint, mlp_learning_rate], f) 
 
 #%% Prediction
-from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
-[predicted_surfaces,predicted_data]=Net.reconstruct(dataset_learning, 6, 0, 1000, 35, 35)
-Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
+#from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
+[predicted_surfaces, predicted_data, real_surfaces, real_data, 
+ events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 1250, 1300, 35, 35)
+#Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
 
 #%% Histogram classifier training, not used anymore
 

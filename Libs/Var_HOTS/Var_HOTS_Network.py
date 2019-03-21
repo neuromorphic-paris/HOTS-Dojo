@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 # Homemade Fresh Libraries like Gandma taught
-from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations, plot_reconstruct, event_cutter
+from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations, plot_reconstruct, event_cutter, event_cutter_no_rate
 from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_event, Reverse_Time_Surface_event, Reverse_Time_Surface_event_no_rate
 
 
@@ -435,22 +435,19 @@ class Var_HOTS_Net:
                      self.surfaces_dimensions[0][1], [data[0][event_ind],data[1][event_ind],data[2][event_ind]],
                      self.taus[0], data, self.polarities[0], minv=0.1) for event_ind in range(end_ind-beg_ind))   
         plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
-        predicted_data=self.predict(data,xdim,ydim)       
-        predicted_surfaces=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
-                     self.surfaces_dimensions[0][1], [predicted_data[0][event_ind],predicted_data[1][event_ind],predicted_data[2][event_ind]],
-                     self.taus[0], predicted_data, self.polarities[0], minv=0.1) for event_ind in range(4000)) 
+        predicted_surfaces,predicted_data, events, new_data, wewewewe, WE, OH =self.predict(data,xdim,ydim)       
         plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
-                         [predicted_data[0][:4000],predicted_data[1][:4000],predicted_data[2][:4000],predicted_data[3][:4000]])
-        return [predicted_surfaces,predicted_data]
+                         predicted_data)
+        return [predicted_surfaces, predicted_data, input_surfaces, data, events, new_data, wewewewe, WE, OH]
         
     def predict(self, input_data, xdim, ydim):
 
         layer_data=input_data
-                
+        batch_size = 50
+       
         for layer in range(self.layers):
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
-            batch_size = 250
             n_batch = len(layer_data[0]) // batch_size
             # Cut the excess data in the first layer : 
             if layer == 0 :
@@ -461,6 +458,7 @@ class Var_HOTS_Net:
                           layer_data[1][event_ind],
                           layer_data[2][event_ind]]for event_ind in range(n_batch*batch_size)] 
             else :
+                OH = recording_results
                 event = [[layer_data[0][event_ind],
                           layer_data[1][event_ind],
                           layer_data[2][event_ind],
@@ -489,15 +487,15 @@ class Var_HOTS_Net:
         for layer in range(self.layers-1,-1,-1):
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
-            batch_size = 250
             # These are the reference frames, only timestamps and position are required
             # As multiple activations generates multiple equal events with different polarities
             # only one is used as a reference
             event = [[layer_data[0][event_ind],
                       layer_data[1][event_ind]] for event_ind in range(0,len(layer_data[0]),self.latent_variables[layer])] 
             decoding_surfaces = self.vaes[layer][2].predict(np.array(latent_activity), batch_size=batch_size)
-
             if layer!=0:
+                wewewewe=decoding_surfaces
+                WE = latent_activity
                 events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                 self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                 decoding_surfaces[event_ind], self.polarities[layer]) for event_ind in range(len(event)))
@@ -513,30 +511,31 @@ class Var_HOTS_Net:
                     new_data[3][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][3]
                     
                 print(len(new_data[0]))
-                new_data=event_cutter(new_data,self.polarities[layer],self.taus[layer],0.1, xdim, ydim, self.surfaces_dimensions[layer])
+                new_data=event_cutter(new_data,self.polarities[layer],self.taus[layer], 0.1, xdim, ydim, self.surfaces_dimensions[layer])
                 print(len(new_data[0]))
                 layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2]),np.array(new_data[3])]
                 latent_activity = [[new_data[3][(ind*self.polarities[layer])+pol]for pol in range(self.polarities[layer])]for ind in range(len(new_data[3])//self.polarities[layer])]
-            else:   
-                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event_no_rate)(self.surfaces_dimensions[layer][0],
-                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
-                                decoding_surfaces[event_ind], self.taus[0], self.polarities[layer]) for event_ind in range(len(event)))
-                # Concatenating everythong to have a structure similiar to layer_data
-                length_data = len(events)*len(events[0][0])
-                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
-                            np.zeros(length_data, dtype=int)]
-                print(np.shape(events))
-                for ind in range(1,len(events)):
-                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
-                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
-                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
-                    
-                print(len(new_data[0]))
-                new_data=event_cutter(new_data,self.polarities[layer],self.taus[layer],0.1, xdim, ydim, self.surfaces_dimensions[layer])
-                print(len(new_data[0]))
-                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2])]
-
-        return layer_data
+#            else:   
+#                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event_no_rate)(self.surfaces_dimensions[layer][0],
+#                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+#                                decoding_surfaces[event_ind], self.taus[0], self.polarities[layer]) for event_ind in range(len(event)))
+#                # Concatenating everythong to have a structure similiar to layer_data
+#                length_data = len(events)*len(events[0][0])
+#                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
+#                            np.zeros(length_data, dtype=int)]
+#                print(np.shape(events))
+#                for ind in range(1,len(events)):
+#                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
+#                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
+#                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
+#                    
+#                print(len(new_data[0]))
+#                new_data=event_cutter_no_rate(new_data,self.polarities[layer],self.taus[layer],10, xdim, ydim, self.surfaces_dimensions[layer])
+#                print(len(new_data[0]))
+#                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2])]
+            reference_events = [np.array(layer_data[0][::self.latent_variables[layer]]),
+                                np.array(layer_data[1][::self.latent_variables[layer]])]
+        return decoding_surfaces, reference_events, events, new_data, wewewewe, WE, OH
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED METHODS GO TO SLEEP, ##
               ##  UNTIL A LAZY DEVELOPER WILL DECIDE WHAT TO DO WITH THEM    ##
         # =============================================================================

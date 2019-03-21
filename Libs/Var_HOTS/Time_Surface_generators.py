@@ -173,7 +173,7 @@ def Reverse_Time_Surface_event_no_rate(xdim, ydim, event, tsurface, timecoeff, n
         ydim,xdim (int) : dimensions of the timesurface
         event (nested lists) : single event defined as [timestamp, [x, y]]. It is the reference event
                                used for the time surface building
-        tsurface (1D numpy array) : array of size num_polarities*xdim*ydim  
+        tsurface (1D numpy array) : array of size num_polarities*xdim*ydim
         timecoeff (float) : the coefficient used to build the timesurfaces for 
                             this layer
         num_polarities (int) : total number of labels or polarities of the time surface 

@@ -93,7 +93,7 @@ def event_cutter(event_list, num_polarities, timecoeff, minv, xdim, ydim, tsurfa
     The concept of time surface is reduntant (as the same event might appear
     in different time surfaces at different moments), thus the events generated 
     by the stacked decoder tend to increase exponentially even with few layer
-    this function helps too cut away redundant information, by comparing time stamps
+    this function helps too cut away redundant information, by comparing timestamps
     and rate. It then cuts the original event_list
     Arguments :
         event_list (nested lists) : A list containing a list of all timestamps, 
@@ -103,8 +103,8 @@ def event_cutter(event_list, num_polarities, timecoeff, minv, xdim, ydim, tsurfa
         timecoeff (float) : the coefficient used to build the timesurfaces for 
                             this layer
         minv (float) : the minimum float number at with two events of different 
-                       timesurfaces can be considered the same one (as the surfaces)
-                       are generated, equality is not expected
+                       timesurfaces can be considered the same one (as in the way
+                       the surfaces are generated, equality is not expected)
        xdim (int), ydim (int) : dimensions of the entireplane for the dataset
                                 generated in this layer
        tsurface_dim (list od 2 int) : dimensions of a single timesurface         
@@ -128,13 +128,13 @@ def event_cutter(event_list, num_polarities, timecoeff, minv, xdim, ydim, tsurfa
     for ind in range(len(event_list[0])-1,-1,-num_polarities):
         current_pos = event_list[1][ind]
         if not np.isnan(timestamp_table[current_pos[0],current_pos[1]]) or current_pos[0]<tsurface_dim[0]//2 \
-            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
-            or current_pos[1]>=ydim+tsurface_dim[1]//2 :
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim-tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim-tsurface_dim[1]//2 :
             actual_rate = event_list[3][ind]
             predicted_rate = rate_table[current_pos[0],current_pos[1]]*np.exp((event_list[0][ind]-timestamp_table[current_pos[0],current_pos[1]])/timecoeff)
             if np.abs(actual_rate-predicted_rate)<=minv or current_pos[0]<tsurface_dim[0]//2 \
-            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
-            or current_pos[1]>=ydim+tsurface_dim[1]//2 :
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim-tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim-tsurface_dim[1]//2 :
                 check_list[ind-num_polarities+1:ind+1]=0
             else:
                 timestamp_table[current_pos[0],current_pos[1]]=event_list[0][ind]
@@ -142,8 +142,90 @@ def event_cutter(event_list, num_polarities, timecoeff, minv, xdim, ydim, tsurfa
         else:
             timestamp_table[current_pos[0],current_pos[1]]=event_list[0][ind]
             rate_table[current_pos[0],current_pos[1]]=event_list[3][ind]
-    event_list=[list(compress(event_list[0], check_list)),list(compress(event_list[1], check_list)),
-                list(compress(event_list[2], check_list)),list(compress(event_list[3], check_list))]
+            
+            
+    event_list=[np.array(list(compress(event_list[0], check_list))),np.array(list(compress(event_list[1], check_list))),
+                np.array(list(compress(event_list[2], check_list))),np.array(list(compress(event_list[3], check_list)))]
+    
+    # The output data need to be sorted like the original dataset in respect to
+    # the timestamp, because the time surface functions are expecting it to be sorted.
+    
+    sort_ind = np.argsort(event_list[0])
+    event_list[0] = event_list[0][sort_ind]
+    event_list[1] = event_list[1][sort_ind]
+    event_list[2] = event_list[2][sort_ind]
+    event_list[3] = event_list[3][sort_ind]
+    
+    return event_list
+
+def event_cutter_no_rate(event_list, num_polarities, timecoeff, mint, xdim, ydim, tsurface_dim, min_timestamp=0):
+    """
+    Same as event cutter but works expecting no rate information as in the 
+    first layer
+    In the reconstruction problem we have to move from timesurfaces to events.
+    The concept of time surface is reduntant (as the same event might appear
+    in different time surfaces at different moments), thus the events generated 
+    by the stacked decoder tend to increase exponentially even with few layer
+    this function helps too cut away redundant information, by comparing timestamps
+    only (If i have same events (pos and polarity) at smiliar timestamps it removes
+    them). 
+    Arguments :
+        event_list (nested lists) : A list containing a list of all timestamps, 
+                                    a list of positions and a list of polarities
+        num_polarities (int) : the number of expected polarities in the net
+        timecoeff (float) : the coefficient used to build the timesurfaces for 
+                            this layer
+        mint (float) : the minimum float number at with two timestamps of different 
+                       timesurfaces can be considered the same one (as in the way
+                       the surfaces are generated, equality is not expected)
+       xdim (int), ydim (int) : dimensions of the entireplane for the dataset
+                                generated in this layer
+       tsurface_dim (list od 2 int) : dimensions of a single timesurface         
+       min_timestamp (int) : Due to numerical approximation it might appen that events
+                             originated might have timestamps lower than 0 
+                             or less than a mintimestamp. Thus this function will also
+                             remove anything with a timestamps lower than min_timestamp
+    Returns :
+        event_list (nested lists) : The cut down version of the input event_list
+    """
+    # Let's create the lookup tables to store all events
+    # one per each per type (timestamps)
+    # the positions will be encoded in the actual positions of values each matrix
+    # only a single polarity is taken in account as i always need a full set of
+    # syncronous polarities to feed the previous layer (except for the first but 
+    # this function won't be called for that)
+    list_dim=np.max(event_list[1])
+    timestamp_tables=[np.nan*np.ones([list_dim+1,list_dim+1])for pol in range(num_polarities)] 
+    # in this list I will save index of the events I want to save with ones
+    # while with 0 I will represent the events that are going to be ereased 
+    check_list = np.ones(len(event_list[0]))
+    # the for loop proceeds backwards
+    for ind in range(len(event_list[0])-1,-1,-1):
+        current_pos = event_list[1][ind]
+        current_pol = event_list[2][ind]
+        if not np.isnan(timestamp_tables[current_pol][current_pos[0],current_pos[1]]) or current_pos[0]<tsurface_dim[0]//2 \
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim+tsurface_dim[1]//2 or event_list[0][ind]<min_timestamp :
+            if np.abs(event_list[0][ind]-timestamp_tables[current_pol][current_pos[0],current_pos[1]])<=mint or current_pos[0]<tsurface_dim[0]//2 \
+            or current_pos[1]<tsurface_dim[1]//2 or current_pos[0] >= xdim+tsurface_dim[0]//2 \
+            or current_pos[1]>=ydim+tsurface_dim[1]//2 or event_list[0][ind]<min_timestamp:
+                check_list[ind]=0
+            else:
+                timestamp_tables[current_pol][current_pos[0],current_pos[1]]=event_list[0][ind]
+        else:
+            timestamp_tables[current_pol][current_pos[0],current_pos[1]]=event_list[0][ind]
+    
+    event_list=[np.array(list(compress(event_list[0], check_list))),np.array(list(compress(event_list[1], check_list))),
+                np.array(list(compress(event_list[2], check_list)))]
+    
+    # The output data need to be sorted like the original dataset in respect to
+    # the timestamp, because the time surface functions are expecting it to be sorted.
+    
+    sort_ind = np.argsort(event_list[0])
+    event_list[0] = event_list[0][sort_ind]
+    event_list[1] = event_list[1][sort_ind]
+    event_list[2] = event_list[2][sort_ind]
+    
     return event_list
 # =============================================================================
 def create_mlp(input_size, hidden_size, output_size, learning_rate):
@@ -220,12 +302,11 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     outputs = decoder(encoder(inputs)[2])
     vae = Model(inputs, outputs, name='vae_mlp')
     
-    L2_z = K.sum(K.square(z_mean),axis=-1)
-    L2_inputs = K.sum(K.square(inputs),axis=-1)
+    L2_z = K.sum(K.square(z_mean),axis=-1)/latent_dim
+    L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
 
     # VAE loss = mse_loss + kl_loss
-    coding_costraint = 0.08
-    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_z-L2_inputs)/(L2_inputs+0.01)
+    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) #+ 0.01*L2_inputs/(L2_z+0.0001)
 
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
@@ -240,17 +321,20 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     return vae, encoder, decoder
 
 def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
-    original_image = np.zeros([ydim+surfaces_dimensions[0][1],xdim+surfaces_dimensions[0][0]])
-    mean_norm = np.zeros([ydim+surfaces_dimensions[0][1],xdim+surfaces_dimensions[0][0]])
+    original_image = np.zeros([ydim,xdim])
+    mean_norm = np.ones([ydim,xdim])
+    # To better deal with sourfaces centered on the borders
     xoff = surfaces_dimensions[0][0]//2
-    yoff = surfaces_dimensions[0][1]//2  
+    yoff = surfaces_dimensions[0][1]//2
     for i in range(len(input_events[0])):
         x0 = input_events[1][i,0]
         y0 = input_events[1][i,1]
-        original_image[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
-        mean_norm[(y0):(y0+2*yoff+1),(x0):(x0+2*xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
+        if x0+xoff>=xdim or x0-xoff<0 or y0+yoff>=ydim or y0-yoff<0 :
+            continue
+        original_image[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
+        mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
     plt.figure()
-    plt.imshow(original_image)
+    plt.imshow(original_image/mean_norm)
 
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##
