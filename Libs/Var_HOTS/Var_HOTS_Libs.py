@@ -275,7 +275,7 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # VAE model = encoder + decoder
     # build encoder model
     inputs = Input(shape=input_shape, name='encoder_input')
-    x = Dense(intermediate_dim, activation='relu')(inputs)
+    x = Dense(intermediate_dim, activation='sigmoid')(inputs)
     z_mean = Dense(latent_dim, name='z_mean')(x)
     z_log_var = Dense(latent_dim, name='z_log_var')(x)
     
@@ -286,16 +286,19 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # instantiate encoder model
     encoder = Model(inputs, [z_mean, z_log_var, z], name='encoder')
     encoder.summary()
+    encoder.compile(loss='mean_squared_error', optimizer='adam')
     #plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
     
     # build decoder model
     latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
-    x = Dense(intermediate_dim, activation='relu')(latent_inputs)
+    x = Dense(intermediate_dim, activation='sigmoid')(latent_inputs)
     outputs = Dense(original_dim, activation='sigmoid')(x)
     
     # instantiate decoder model
     decoder = Model(latent_inputs, outputs, name='decoder')
     decoder.summary()
+    decoder.compile(loss='mean_squared_error', optimizer='adam')
+
     #plot_model(decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
     
     # instantiate VAE model
@@ -304,9 +307,9 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     
     L2_z = K.sum(K.square(z_mean),axis=-1)/latent_dim
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
-
+    # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) #+ 0.01*L2_inputs/(L2_z+0.0001)
+    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_inputs-L2_z)  #+ 0.01*L2_inputs/(L2_z+0.0001) 
 
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
@@ -334,7 +337,7 @@ def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
         original_image[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
         mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
     plt.figure()
-    plt.imshow(original_image/mean_norm)
+    plt.imshow(original_image)
 
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##

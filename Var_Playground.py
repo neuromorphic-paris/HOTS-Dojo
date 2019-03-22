@@ -134,7 +134,7 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 #%% Prediction
 #from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
- events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 1250, 1300, 35, 35)
+ events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 0, 1300, 35, 35)
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
 
 #%% Histogram classifier training, not used anymore

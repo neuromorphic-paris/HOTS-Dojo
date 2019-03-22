@@ -118,10 +118,11 @@ def Time_Surface_event(xdim, ydim, event, timecoeff, dataset, num_polarities, mi
     if len(dataset) == 4:
         tmpdata = [tmpdata[0][ind_subset], tmpdata[1][ind_subset], tmpdata[2][ind_subset], tmpdata[3][ind_subset]]
         tsurface_array = np.exp((tmpdata[0]-timestamp)/timecoeff)*tmpdata[3]
+        tsurface_array[-1] = 0
     else:
         tmpdata = [tmpdata[0][ind_subset], tmpdata[1][ind_subset], tmpdata[2][ind_subset]]     
         tsurface_array = np.exp((tmpdata[0]-timestamp)/timecoeff)
-
+        tsurface_array[-1] = 0
     # now i need to build a single array that will represents my surface, i will take 
     # only the highest value for each x and y as the other ar less informative
     # and we want each layer be dependant on the timecoeff of the timesurface

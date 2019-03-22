@@ -101,6 +101,7 @@ class Var_HOTS_Net:
             layer_activations = []
             new_data = []
             all_surfaces = []
+            all_surfaces_plus_null=[]
             # Create the varational autoencoder for this layer
             #intermediate_dim = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][0]
             intermediate_dim = 40
@@ -138,11 +139,43 @@ class Var_HOTS_Net:
                     recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                         self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
+                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
+#                all_surfaces = all_surfaces + [(i==0)*recording_surfaces[ind]+(i==1)*null_surfaces[ind] for i in range(2) for ind in range(len(recording_surfaces))]
+                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
                 all_surfaces = all_surfaces + recording_surfaces
             all_surfaces=np.array(all_surfaces)
-            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
-                     epochs=20, batch_size=batch_size,
-                     validation_data=(all_surfaces, None))
+            all_surfaces_plus_null= np.array(all_surfaces_plus_null)
+            # pre training 
+            print('Pre training')
+            tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
+            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+                     [np.zeros([100000,self.latent_variables[layer]]), 
+                      -0.5*np.ones([100000,self.latent_variables[layer]]),
+                      np.zeros([100000,self.latent_variables[layer]])], shuffle=False,
+                     epochs=5, batch_size=batch_size)
+            
+            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+            np.zeros([100000,tsurf_size]), shuffle=False,
+                     epochs=5, batch_size=batch_size)
+                    
+                    
+            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
+                     epochs=10, batch_size=batch_size,
+                     validation_data=(all_surfaces_plus_null, None))
+            
+            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+                     [np.zeros([100000,self.latent_variables[layer]]), 
+                      -0.5*np.ones([100000,self.latent_variables[layer]]),
+                      np.zeros([100000,self.latent_variables[layer]])], shuffle=False,
+                     epochs=5, batch_size=batch_size)
+            
+            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+            np.zeros([100000,tsurf_size]), shuffle=False,
+                     epochs=5, batch_size=batch_size)
+            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
+                     epochs=3, batch_size=batch_size,
+                     validation_data=(all_surfaces_plus_null, None))
+#            all_surfaces=all_surfaces[::2]
             current_pos = 0
             for recording in range(len(input_data)):                
                 # Get network activations at steady state (after learning)
@@ -515,6 +548,8 @@ class Var_HOTS_Net:
                 print(len(new_data[0]))
                 layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2]),np.array(new_data[3])]
                 latent_activity = [[new_data[3][(ind*self.polarities[layer])+pol]for pol in range(self.polarities[layer])]for ind in range(len(new_data[3])//self.polarities[layer])]
+#            else:
+#                 events, new_data, wewewewe, WE, OH = [[],[],[],[],[]]
 #            else:   
 #                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event_no_rate)(self.surfaces_dimensions[layer][0],
 #                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
