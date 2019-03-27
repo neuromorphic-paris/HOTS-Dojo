@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 # Homemade Fresh Libraries like Gandma taught
-from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations, plot_reconstruct, event_cutter, event_cutter_no_rate
+from Libs.Var_HOTS.Var_HOTS_Libs import create_vae, create_mlp, events_from_activations, plot_reconstruct, event_cutter, event_cutter_no_rate,create_sparse
 from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_event, Reverse_Time_Surface_event, Reverse_Time_Surface_event_no_rate
 
 
@@ -76,7 +76,7 @@ class Var_HOTS_Net:
 
     # Method for learning
     # =============================================================================        
-    def learn(self, dataset, learning_rate, coding_costraint = 0.08): 
+    def learn_old(self, dataset, learning_rate, coding_costraint = 0.08): 
         """
         The method is full online but it espects to work on an entire dataset
         at once to be more similiar in structure to its offline counterpart.
@@ -107,6 +107,7 @@ class Var_HOTS_Net:
             intermediate_dim = 40
             self.vaes.append(create_vae(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
                                         self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
+
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
             batch_size = 500
@@ -150,8 +151,8 @@ class Var_HOTS_Net:
             tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
             self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
                      [np.zeros([100000,self.latent_variables[layer]]), 
-                      -0.5*np.ones([100000,self.latent_variables[layer]]),
-                      np.zeros([100000,self.latent_variables[layer]])], shuffle=False,
+                      0*np.ones([100000,self.latent_variables[layer]]),
+                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
                      epochs=5, batch_size=batch_size)
             
             self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
@@ -165,15 +166,16 @@ class Var_HOTS_Net:
             
             self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
                      [np.zeros([100000,self.latent_variables[layer]]), 
-                      -0.5*np.ones([100000,self.latent_variables[layer]]),
-                      np.zeros([100000,self.latent_variables[layer]])], shuffle=False,
-                     epochs=5, batch_size=batch_size)
+                      0*np.ones([100000,self.latent_variables[layer]]),
+                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
+                     epochs=10, batch_size=batch_size)
             
             self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
             np.zeros([100000,tsurf_size]), shuffle=False,
-                     epochs=5, batch_size=batch_size)
+                     epochs=10, batch_size=batch_size)
+            
             self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
-                     epochs=3, batch_size=batch_size,
+                     epochs=1, batch_size=batch_size,
                      validation_data=(all_surfaces_plus_null, None))
 #            all_surfaces=all_surfaces[::2]
             current_pos = 0
@@ -184,6 +186,130 @@ class Var_HOTS_Net:
                     current_pos += len(input_data[recording][0])//self.polarities[layer]
                 else:
                     recording_results, _, _ = self.vaes[layer][1].predict(np.array(all_surfaces[current_pos:current_pos+len(input_data[recording][0])]), batch_size=batch_size)
+                    current_pos += len(input_data[recording][0])
+                layer_activations.append(recording_results)
+                
+                # Generate new events only if I am not at the last layer
+                if layer != (self.layers-1):
+                    if layer != 0:
+                        new_data.append(events_from_activations(recording_results, [input_data[recording][0][range(0,len(input_data[recording][0]),self.polarities[layer])],
+                                                                                    input_data[recording][1][range(0,len(input_data[recording][0]),self.polarities[layer])]]))
+                    else:
+                        new_data.append(events_from_activations(recording_results, input_data[recording]))
+                        
+            input_data=new_data
+        self.last_layer_activations = layer_activations
+        
+        
+    # Method for learning
+    # =============================================================================        
+    def learn(self, dataset, learning_rate, coding_costraint = 0.08): 
+        """
+        The method is full online but it espects to work on an entire dataset
+        at once to be more similiar in structure to its offline counterpart.
+        This library has the porpouse to test various sparse HOTS implementations
+        and to compare them, not to work in real time! (If it's worthy a real time
+                                                        will hit the shelfs soon)
+        Arguments:
+            dataset (nested lists) : the initial dataset used for learning
+            learning_rate (float) : It's the learning rate of ADAM online optimization                 
+            coding_costraint (float) : a Lagrange multiplier to constraint the autoencoders
+                                       to move low active time surface rapresentation to smaller 
+                                       absolute values of the latent variables (wich is fundamental 
+                                       for data encoding with timesurfaces)
+        
+        """
+        # The list of all data batches to currently process
+        # input_data[recording][events, timestamp if 0 or xy coordinates if 1]
+        # In the first layer the input data is directly dataset given by the user
+        input_data=dataset
+    
+        for layer in range(self.layers):
+            layer_activations = []
+            new_data = []
+            all_surfaces = []
+            all_surfaces_plus_null=[]
+            # Create the varational autoencoder for this layer
+            #intermediate_dim = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][0]
+            intermediate_dim = 40
+#            self.vaes.append(create_vae(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
+#                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
+            self.vaes.append(create_sparse(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
+                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            batch_size = 500
+            for recording in range(len(input_data)):
+                n_batch = len(input_data[recording][0]) // batch_size
+                
+                
+                # Cut the excess data in the first layer : 
+                if layer == 0 :
+                    input_data[recording][0]=input_data[recording][0][:n_batch*batch_size]
+                    input_data[recording][1]=input_data[recording][1][:n_batch*batch_size]
+                    input_data[recording][2]=input_data[recording][2][:n_batch*batch_size]
+                    event = [[input_data[recording][0][event_ind],
+                              input_data[recording][1][event_ind],
+                              input_data[recording][2][event_ind]]for event_ind in range(n_batch*batch_size)] 
+                else :
+                    event = [[input_data[recording][0][event_ind],
+                              input_data[recording][1][event_ind],
+                              input_data[recording][2][event_ind],
+                              input_data[recording][3][event_ind]]for event_ind in range(n_batch*batch_size)] 
+                # The multiple event polarities are all synchonized in the layers after the first.
+                # As a single time surface is build on all polarities, there is no need to build a time 
+                # surface per each event with a different polarity and equal time stamp, thus only 
+                # a fraction of the events are extracted here
+                if layer != 0 :
+                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                        self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                        self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch*batch_size,self.polarities[layer]))
+                else:
+                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                        self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                        self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
+                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
+#                all_surfaces = all_surfaces + [(i==0)*recording_surfaces[ind]+(i==1)*null_surfaces[ind] for i in range(2) for ind in range(len(recording_surfaces))]
+                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
+                all_surfaces = all_surfaces + recording_surfaces
+            all_surfaces=np.array(all_surfaces)
+            all_surfaces_plus_null= np.array(all_surfaces_plus_null)
+            # pre training 
+            print('Pre training')
+            tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
+            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+                     np.zeros([100000,self.latent_variables[layer]]), shuffle=False,
+                     epochs=5, batch_size=batch_size)
+            
+            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+            np.zeros([100000,tsurf_size]), shuffle=False,
+                     epochs=5, batch_size=batch_size)
+#                    
+#                    
+#            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
+#                     epochs=10, batch_size=batch_size,
+#                     validation_data=(all_surfaces_plus_null, None))
+#            
+#            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+#                     np.zeros([100000,self.latent_variables[layer]]), shuffle=False,
+#                     epochs=10, batch_size=batch_size)
+#            
+#            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+#            np.zeros([100000,tsurf_size]), shuffle=False,
+#                     epochs=10, batch_size=batch_size)
+            
+            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
+                     epochs=50, batch_size=batch_size,
+                     validation_data=(all_surfaces, None))
+#            all_surfaces=all_surfaces[::2]
+            current_pos = 0
+            for recording in range(len(input_data)):                
+                # Get network activations at steady state (after learning)
+                if layer != 0 :
+                    recording_results = self.vaes[layer][1].predict(np.array(all_surfaces[current_pos:current_pos+len(input_data[recording][0])//self.polarities[layer]]), batch_size=batch_size)
+                    current_pos += len(input_data[recording][0])//self.polarities[layer]
+                else:
+                    recording_results= self.vaes[layer][1].predict(np.array(all_surfaces[current_pos:current_pos+len(input_data[recording][0])]), batch_size=batch_size)
                     current_pos += len(input_data[recording][0])
                 layer_activations.append(recording_results)
                 
@@ -259,7 +385,7 @@ class Var_HOTS_Net:
                     recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                         self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
-                recording_results, _, _ = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
+                recording_results = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
                 layer_activations.append(recording_results)
                 # Generate new events only if I am not at the last layer
                 if layer != (self.layers-1):
@@ -276,7 +402,82 @@ class Var_HOTS_Net:
         return layer_activations
         
         
+    # Method to compute a full network renspose, similiar to learn in the code 
+    # structure
+    # =============================================================================  
+    def full_net_dataset_response_old(self, dataset, layer_stop = -1, save=False):
+        """
+        This method compute a full network response, but it saves only the activations
+        of the last layer to save memory, if you are interested in a layer different
+        from the last one, you can select it with layer_stop
+        
+        Arguments:
+            dataset (nested lists) : the initial dataset that the network will have to respond to 
+            layer_stop (int) : It's the learning rate, what do you expect me to say ?                  
+            verbose (bool) : If verbose is on, it will display graphs to assest the ongoing,
+                                                           learning algorithm (Per batch)
+        
+        """
+        
+        # The list of all data batches to currently process
+        # input_data[recording][events, timestamp if 0 or xy coordinates if 1]
+        # In the first layer the input data is directly dataset given by the user
+        input_data=dataset
+        
+        # If required by the user, the computation will stop ad a predefined layer
+        if layer_stop==-1:
+            layer_stop=self.layers-1
+        
+        for layer in range(layer_stop+1):
+            layer_activations = []
+            new_data = []
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            batch_size = 125
+            for recording in range(len(input_data)):
+                recording_surfaces = []
+                n_batch = len(input_data[recording][0]) // batch_size
+                # Cut the excess data in the first layer : 
+                if layer == 0 :
+                    input_data[recording][0]=input_data[recording][0][:n_batch*batch_size]
+                    input_data[recording][1]=input_data[recording][1][:n_batch*batch_size]
+                    input_data[recording][2]=input_data[recording][2][:n_batch*batch_size]
+                    event = [[input_data[recording][0][event_ind],
+                              input_data[recording][1][event_ind],
+                              input_data[recording][2][event_ind]]for event_ind in range(n_batch*batch_size)] 
+                else :
+                    event = [[input_data[recording][0][event_ind],
+                              input_data[recording][1][event_ind],
+                              input_data[recording][2][event_ind],
+                              input_data[recording][3][event_ind]]for event_ind in range(n_batch*batch_size)] 
 
+                # The multiple event polarities are all synchonized in the layers after the first.
+                # As a single time surface is build on all polarities, there is no need to build a time 
+                # surface per each event with a different polarity and equal time stamp, thus only 
+                # a fraction of the events are extracted here
+                if layer != 0 :
+                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                        self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                        self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch*batch_size,self.polarities[layer]))
+                else:
+                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                        self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                        self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
+                recording_results, _, _ = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
+                layer_activations.append(recording_results)
+                # Generate new events only if I am not at the last layer
+                if layer != (self.layers-1):
+                    if layer != 0:
+                        new_data.append(events_from_activations(recording_results, [input_data[recording][0][range(0,len(input_data[recording][0]),self.polarities[layer])],
+                                                                                    input_data[recording][1][range(0,len(input_data[recording][0]),self.polarities[layer])]]))
+                    else:
+                        new_data.append(events_from_activations(recording_results, input_data[recording]))
+            input_data=new_data
+        
+        if save is True:
+            self.last_layer_activations = layer_activations
+        
+        return layer_activations
     
     # Method for training a mlp classification model 
     # =============================================================================      
@@ -472,8 +673,108 @@ class Var_HOTS_Net:
         plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
                          predicted_data)
         return [predicted_surfaces, predicted_data, input_surfaces, data, events, new_data, wewewewe, WE, OH]
-        
+
     def predict(self, input_data, xdim, ydim):
+
+        layer_data=input_data
+        batch_size = 50
+       
+        for layer in range(self.layers):
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            n_batch = len(layer_data[0]) // batch_size
+            # Cut the excess data in the first layer : 
+            if layer == 0 :
+                layer_data[0]=layer_data[0][:n_batch*batch_size]
+                layer_data[1]=layer_data[1][:n_batch*batch_size]
+                layer_data[2]=layer_data[2][:n_batch*batch_size]
+                event = [[layer_data[0][event_ind],
+                          layer_data[1][event_ind],
+                          layer_data[2][event_ind]]for event_ind in range(n_batch*batch_size)] 
+            else :
+                OH = recording_results
+                event = [[layer_data[0][event_ind],
+                          layer_data[1][event_ind],
+                          layer_data[2][event_ind],
+                          layer_data[3][event_ind]]for event_ind in range(n_batch*batch_size)] 
+
+            # The multiple event polarities are all synchonized in the layers after the first.
+            # As a single time surface is build on all polarities, there is no need to build a time 
+            # surface per each event with a different polarity and equal time stamp, thus only 
+            # a fraction of the events are extracted here
+            if layer != 0 :
+                recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                    self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                    self.taus[layer], layer_data.copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch*batch_size,self.polarities[layer]))
+            else:
+                recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                    self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                    self.taus[layer], layer_data.copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
+            recording_results = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
+            if layer != 0:
+                new_data=events_from_activations(recording_results, [layer_data[0][range(0,len(layer_data[0]),self.polarities[layer])],
+                                                                            layer_data[1][range(0,len(layer_data[0]),self.polarities[layer])]])
+            else:
+                new_data=events_from_activations(recording_results, layer_data)
+            layer_data=new_data
+        latent_activity = recording_results
+        for layer in range(self.layers-1,-1,-1):
+            # The code is going to run on gpus, to improve performances rather than 
+            # a pure online algorithm I am going to minibatch 
+            # These are the reference frames, only timestamps and position are required
+            # As multiple activations generates multiple equal events with different polarities
+            # only one is used as a reference
+            event = [[layer_data[0][event_ind],
+                      layer_data[1][event_ind]] for event_ind in range(0,len(layer_data[0]),self.latent_variables[layer])] 
+            decoding_surfaces = self.vaes[layer][2].predict(np.array(latent_activity), batch_size=batch_size)
+            if layer!=0:
+                wewewewe=decoding_surfaces
+                WE = latent_activity
+                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+                                decoding_surfaces[event_ind], self.polarities[layer]) for event_ind in range(len(event)))
+                # Concatenating everythong to have a structure similiar to layer_data
+                length_data = len(events)*len(events[0][0])
+                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
+                            np.zeros(length_data, dtype=int), np.zeros(length_data, dtype=float)]
+                print(np.shape(events))
+                for ind in range(1,len(events)):
+                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
+                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
+                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
+                    new_data[3][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][3]
+                    
+                print(len(new_data[0]))
+                new_data=event_cutter(new_data,self.polarities[layer],self.taus[layer], 0.1, xdim, ydim, self.surfaces_dimensions[layer])
+                print(len(new_data[0]))
+                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2]),np.array(new_data[3])]
+                latent_activity = [[new_data[3][(ind*self.polarities[layer])+pol]for pol in range(self.polarities[layer])]for ind in range(len(new_data[3])//self.polarities[layer])]
+#            else:
+#                 events, new_data, wewewewe, WE, OH = [[],[],[],[],[]]
+#            else:   
+#                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event_no_rate)(self.surfaces_dimensions[layer][0],
+#                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
+#                                decoding_surfaces[event_ind], self.taus[0], self.polarities[layer]) for event_ind in range(len(event)))
+#                # Concatenating everythong to have a structure similiar to layer_data
+#                length_data = len(events)*len(events[0][0])
+#                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
+#                            np.zeros(length_data, dtype=int)]
+#                print(np.shape(events))
+#                for ind in range(1,len(events)):
+#                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
+#                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
+#                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
+#                    
+#                print(len(new_data[0]))
+#                new_data=event_cutter_no_rate(new_data,self.polarities[layer],self.taus[layer],10, xdim, ydim, self.surfaces_dimensions[layer])
+#                print(len(new_data[0]))
+#                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2])]
+            reference_events = [np.array(layer_data[0][::self.latent_variables[layer]]),
+                                np.array(layer_data[1][::self.latent_variables[layer]])]
+        return decoding_surfaces, reference_events, events, new_data, wewewewe, WE, OH
+
+        
+    def predict_old(self, input_data, xdim, ydim):
 
         layer_data=input_data
         batch_size = 50

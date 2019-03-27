@@ -11,12 +11,12 @@ to the upcoming Var Hots paper
  
 """
 
-from keras.layers import Lambda, Input, Dense
+from keras.layers import Lambda, Input, Dense, BatchNormalization
 from keras.models import Model, Sequential
 from keras.losses import mse
 from keras.utils import plot_model
 from keras import backend as K
-from keras import optimizers
+from keras import optimizers, regularizers
 from itertools import compress
 
 import numpy as np 
@@ -241,7 +241,7 @@ def create_mlp(input_size, hidden_size, output_size, learning_rate):
     """
     mlp = Sequential()
     mlp.add(Dense(hidden_size, input_dim=input_size, activation='relu'))
-    mlp.add(Dense(output_size, activation='sigmoid'))
+    mlp.add(Dense(output_size, activation='relu'))
     adam=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
     mlp.compile(optimizer=adam,
               loss='mean_squared_error',
@@ -309,7 +309,7 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_inputs-L2_z)  #+ 0.01*L2_inputs/(L2_z+0.0001) 
+    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
 
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
@@ -322,6 +322,84 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     vae.compile(optimizer=adam)
     
     return vae, encoder, decoder
+
+
+# Let's try with a small predefined network    
+def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, coding_costraint):
+    """
+    Function used to create a small autoencoder used each layer of Var HOTS
+    Arguments :
+        original_dim (int) : size of the input layer
+        latent_dim (int) : size of the output layer
+        intermediate_dim (int) : size of the hidden layer
+        learning_rate (int) : the learning rate for the optiomization alg.
+        coding_costraint (float) : a Lagrange multiplier to constraint the autoencoders
+                                   to move low active time surface rapresentation to smaller 
+                                   absolute values of the latent variables (wich is fundamental 
+                                   for data encoding with timesurfaces)
+    Returns :
+        vae (keras model) : the freshly baked network
+        encoder (keras model) : the freshly baked encoder
+        decoder (keras model) : the freshly baked decoder
+        
+    """
+    # network parameters
+    input_shape = (original_dim, )
+    
+    # Define a regularizer
+    def egg(latent_vars):
+        return   0.01*K.abs(4-K.sum(K.square(latent_vars)))
+        #return  0.0001/K.sum(K.square(latent_vars),axis=-1) 
+    
+    # build encoder model
+    inputs = Input(shape=input_shape, name='encoder_input')    
+    norm = BatchNormalization()(inputs)
+    x = Dense(intermediate_dim, activation='sigmoid')(norm)
+#    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
+#    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
+#    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
+    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=egg)(x)
+    
+    
+    
+    # instantiate encoder model
+    encoder = Model(inputs, encoded, name='encoder')
+    encoder.summary()
+    encoder.compile(loss='mean_squared_error', optimizer='adam')
+    #plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
+    
+    # build decoder model
+    latent_inputs = Input(shape=(latent_dim,), name='latent_vars')
+    norm = BatchNormalization()(latent_inputs)
+    x = Dense(intermediate_dim, activation='sigmoid')(norm)
+#    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
+#    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
+#    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
+    outputs = Dense(original_dim, name='decoded')(x)
+    
+    # instantiate decoder model
+    decoder = Model(latent_inputs, outputs, name='decoder')
+    decoder.summary()
+    decoder.compile(loss='mean_squared_error', optimizer='adam')
+
+    #plot_model(decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
+    
+    # instantiate VAE model
+    outputs = decoder(encoder(inputs))
+    sae = Model(inputs, outputs, name='vae_mlp')
+    
+    L2_z = K.sum(K.square(encoded),axis=-1)#/latent_dim
+    L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
+    # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
+    # VAE loss = mse_loss + kl_loss
+    reconstruction_loss = mse(inputs, outputs)#   + 0.01*K.abs(4-L2_z)       #+ coding_costraint*K.abs(L2_inputs-L2_z) +1/(L2_z+0.0001) 
+    sae.add_loss(reconstruction_loss)
+    #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
+    adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+    sae.compile(optimizer=adam)
+    
+    return sae, encoder, decoder
+
 
 def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
     original_image = np.zeros([ydim,xdim])

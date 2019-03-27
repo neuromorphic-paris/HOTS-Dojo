@@ -72,7 +72,7 @@ latent_variables = [6,8]
 surfaces_dimensions = [[11,11],[15,15]]
 taus = [1000,5000]
 learning_rate = [0.008,0.008]
-coding_costraint = 0.001
+coding_costraint = 1
 
 first_layer_polarities = dataset_polarities
 
@@ -103,12 +103,12 @@ print("Learning elapsed time : "+str(elapsed_time))
 
 layer = 1
 variables_ind = [0,1] 
-variable_fix = 0 
+variable_fix = 0
 
 Net.plot_vae_decode_2D(0, variables_ind, variable_fix)
     
 Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
-Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning)
+Net.plot_vae_space_2D(0, variables_ind, legend, labels_learning, dataset_learning)
 plt.pause(0.1)
 
 #%% Mlp classifier training
@@ -135,6 +135,8 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 #from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
  events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 0, 1300, 35, 35)
+import numpy as np
+test=np.abs(4-np.sqrt(np.sum(we**2,1)/8))
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
 
 #%% Histogram classifier training, not used anymore
