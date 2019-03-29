@@ -105,10 +105,11 @@ layer = 1
 variables_ind = [0,1] 
 variable_fix = 0
 
-Net.plot_vae_decode_2D(0, variables_ind, variable_fix)
-    
+Net.plot_vae_decode_2D(0, variables_ind, variable_fix)   
 Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
 Net.plot_vae_space_2D(0, variables_ind, legend, labels_learning, dataset_learning)
+Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning, dataset_learning)
+
 plt.pause(0.1)
 
 #%% Mlp classifier training
@@ -136,7 +137,7 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
  events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 0, 1300, 35, 35)
 import numpy as np
-test=np.abs(4-np.sqrt(np.sum(we**2,1)/8))
+test=np.abs(1-np.sqrt(np.mean(we**2,1)))
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
 
 #%% Histogram classifier training, not used anymore

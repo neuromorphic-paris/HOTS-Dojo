@@ -276,6 +276,7 @@ class Var_HOTS_Net:
             all_surfaces_plus_null= np.array(all_surfaces_plus_null)
             # pre training 
             print('Pre training')
+            
             tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
             self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
                      np.zeros([100000,self.latent_variables[layer]]), shuffle=False,
@@ -284,22 +285,21 @@ class Var_HOTS_Net:
             self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
             np.zeros([100000,tsurf_size]), shuffle=False,
                      epochs=5, batch_size=batch_size)
-#                    
-#                    
-#            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
-#                     epochs=10, batch_size=batch_size,
-#                     validation_data=(all_surfaces_plus_null, None))
-#            
-#            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
-#                     np.zeros([100000,self.latent_variables[layer]]), shuffle=False,
-#                     epochs=10, batch_size=batch_size)
-#            
-#            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
-#            np.zeros([100000,tsurf_size]), shuffle=False,
-#                     epochs=10, batch_size=batch_size)
+                 
+            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
+                     epochs=20, batch_size=batch_size,
+                     validation_data=(all_surfaces, None))
+            
+            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+                     np.zeros([100000,self.latent_variables[layer]]), shuffle=False,
+                     epochs=10, batch_size=batch_size)
+            
+            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+            np.zeros([100000,tsurf_size]), shuffle=False,
+                     epochs=10, batch_size=batch_size)
             
             self.vaes[layer][0].fit(all_surfaces, shuffle=False,
-                     epochs=50, batch_size=batch_size,
+                     epochs=1, batch_size=batch_size,
                      validation_data=(all_surfaces, None))
 #            all_surfaces=all_surfaces[::2]
             current_pos = 0

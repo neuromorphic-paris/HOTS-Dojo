@@ -348,17 +348,18 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     
     # Define a regularizer
     def egg(latent_vars):
-        return   0.01*K.abs(4-K.sum(K.square(latent_vars)))
+        return   0.0001*K.abs(8-K.sqrt(K.sum(K.square(latent_vars),axis=-1)))# + 0.0001*K.sum(K.abs(latent_vars),axis=-1)
         #return  0.0001/K.sum(K.square(latent_vars),axis=-1) 
     
     # build encoder model
     inputs = Input(shape=input_shape, name='encoder_input')    
-    norm = BatchNormalization()(inputs)
-    x = Dense(intermediate_dim, activation='sigmoid')(norm)
+#    norm = BatchNormalization()(inputs)
+    x = Dense(intermediate_dim, activation='relu')(inputs)
 #    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
 #    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
 #    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
-    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=egg)(x)
+#    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=egg)(x)
+    encoded = Dense(latent_dim, name='latent_vars')(x)
     
     
     
@@ -370,8 +371,8 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     
     # build decoder model
     latent_inputs = Input(shape=(latent_dim,), name='latent_vars')
-    norm = BatchNormalization()(latent_inputs)
-    x = Dense(intermediate_dim, activation='sigmoid')(norm)
+#    norm = BatchNormalization()(latent_inputs)
+    x = Dense(intermediate_dim, activation='relu')(latent_inputs)
 #    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
 #    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
 #    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
@@ -392,7 +393,7 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs)#   + 0.01*K.abs(4-L2_z)       #+ coding_costraint*K.abs(L2_inputs-L2_z) +1/(L2_z+0.0001) 
+    reconstruction_loss = mse(inputs, outputs)  + 0.001*K.abs(1*latent_dim-K.sqrt(K.sum(K.square(encoded),axis=-1)))  #   + 0.01*K.abs(4-L2_z)       #+ coding_costraint*K.abs(L2_inputs-L2_z) +1/(L2_z+0.0001) 
     sae.add_loss(reconstruction_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
