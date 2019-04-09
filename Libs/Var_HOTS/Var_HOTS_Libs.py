@@ -270,6 +270,8 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
         
     """
     
+    n_samples_carlo = 50 
+    
     def log_stdnormal(x):
         """log density of a normalized gaussian"""
         c = - 0.5 * np.log(2*np.pi)
@@ -327,22 +329,25 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     reconstruction_loss = mse(inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
     
     def monte_carlo_kl_div(args):
-    mean, std = args
-    for k in range(n_sample):
-        epsilon = K.random_normal(shape=(batch_size, latent_dim), mean=0.,
-                              std=epsilon_std)
-        z = mean + K.exp(K.log(std+1e-8)) * epsilon
-        try:
-            loss += K.sum(log_normal2(z, mean, 2*K.log(z_std+1e-8)) - log_stdnormal(z) , -1)
-        except NameError:
-            loss = K.sum(log_normal2(z, mean, 2*K.log(z_std+1e-8)) - log_stdnormal(z) , -1)
-    return loss / n_sample
+        mean, log_std = args
+        batch = K.shape(mean)[0]
+        dim = K.int_shape(mean)[1]
+        for k in range(n_samples_carlo):
+            epsilon = K.random_normal(shape=(batch, dim))
+            z = mean + K.exp(0.5*log_std+1e-8) * epsilon
+            try:
+                loss += K.sum(log_normal2(z, mean, log_std) - log_stdnormal(z) , -1)
+            except NameError:
+                loss = K.sum(log_normal2(z, mean, log_std) - log_stdnormal(z) , -1)
+        return loss / n_samples_carlo
+    
+    carlo = Lambda(monte_carlo_kl_div)([z_mean, z_log_var])
     
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
     kl_loss = K.sum(kl_loss, axis=-1)
     kl_loss *= -0.5
-    vae_loss = K.mean(reconstruction_loss + kl_loss)
+    vae_loss = K.mean(reconstruction_loss )#+ kl_loss)#+ carlo) 
     vae.add_loss(vae_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)

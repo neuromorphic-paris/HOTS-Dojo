@@ -76,7 +76,7 @@ class Var_HOTS_Net:
 
     # Method for learning
     # =============================================================================        
-    def learn_old(self, dataset, learning_rate, coding_costraint = 0.08): 
+    def learn(self, dataset, learning_rate, coding_costraint = 0.08): 
         """
         The method is full online but it espects to work on an entire dataset
         at once to be more similiar in structure to its offline counterpart.
@@ -203,7 +203,7 @@ class Var_HOTS_Net:
         
     # Method for learning
     # =============================================================================        
-    def learn(self, dataset, learning_rate, coding_costraint = 0.08): 
+    def learn_old(self, dataset, learning_rate, coding_costraint = 0.08): 
         """
         The method is full online but it espects to work on an entire dataset
         at once to be more similiar in structure to its offline counterpart.
@@ -327,7 +327,7 @@ class Var_HOTS_Net:
     # Method to compute a full network renspose, similiar to learn in the code 
     # structure
     # =============================================================================  
-    def full_net_dataset_response(self, dataset, layer_stop = -1, save=False):
+    def full_net_dataset_response_old(self, dataset, layer_stop = -1, save=False):
         """
         This method compute a full network response, but it saves only the activations
         of the last layer to save memory, if you are interested in a layer different
@@ -405,7 +405,7 @@ class Var_HOTS_Net:
     # Method to compute a full network renspose, similiar to learn in the code 
     # structure
     # =============================================================================  
-    def full_net_dataset_response_old(self, dataset, layer_stop = -1, save=False):
+    def full_net_dataset_response(self, dataset, layer_stop = -1, save=False):
         """
         This method compute a full network response, but it saves only the activations
         of the last layer to save memory, if you are interested in a layer different
