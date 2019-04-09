@@ -269,6 +269,21 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
         decoder (keras model) : the freshly baked decoder
         
     """
+    
+    def log_stdnormal(x):
+        """log density of a normalized gaussian"""
+        c = - 0.5 * np.log(2*np.pi)
+        result = c - K.square(x) / 2
+        return result
+
+
+    def log_normal2(x, mean, log_var):
+        """log density of a normalized gaussian of mean(mean) and variance exp(log_var)"""
+        c = - 0.5 * np.log(2*np.pi)
+        result = c - log_var/2 - K.square(x - mean) / (2 * K.exp(log_var) + 1e-8)
+        return result
+    
+    
     # network parameters
     input_shape = (original_dim, )
     
@@ -309,8 +324,20 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs) + coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
-
+    reconstruction_loss = mse(inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
+    
+    def monte_carlo_kl_div(args):
+    mean, std = args
+    for k in range(n_sample):
+        epsilon = K.random_normal(shape=(batch_size, latent_dim), mean=0.,
+                              std=epsilon_std)
+        z = mean + K.exp(K.log(std+1e-8)) * epsilon
+        try:
+            loss += K.sum(log_normal2(z, mean, 2*K.log(z_std+1e-8)) - log_stdnormal(z) , -1)
+        except NameError:
+            loss = K.sum(log_normal2(z, mean, 2*K.log(z_std+1e-8)) - log_stdnormal(z) , -1)
+    return loss / n_sample
+    
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
     kl_loss = K.sum(kl_loss, axis=-1)
@@ -359,7 +386,7 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
 #    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
 #    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
 #    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=egg)(x)
-    encoded = Dense(latent_dim, name='latent_vars')(x)
+    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=regularizers.l1(1e-9))(x)
     
     
     
@@ -393,7 +420,7 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs)  + 0.001*K.abs(1*latent_dim-K.sqrt(K.sum(K.square(encoded),axis=-1)))  #   + 0.01*K.abs(4-L2_z)       #+ coding_costraint*K.abs(L2_inputs-L2_z) +1/(L2_z+0.0001) 
+    reconstruction_loss = mse(inputs, outputs) # 0.0001*K.abs(10*latent_dim-(K.sum(K.square(encoded),axis=-1)))  #   + 0.01*K.abs(4-L2_z)       #+ coding_costraint*K.abs(L2_inputs-L2_z) +1/(L2_z+0.0001) 
     sae.add_loss(reconstruction_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)

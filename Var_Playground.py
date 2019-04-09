@@ -106,9 +106,9 @@ variables_ind = [0,1]
 variable_fix = 0
 
 Net.plot_vae_decode_2D(0, variables_ind, variable_fix)   
-Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
+#Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
 Net.plot_vae_space_2D(0, variables_ind, legend, labels_learning, dataset_learning)
-Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning, dataset_learning)
+#Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning, dataset_learning)
 
 plt.pause(0.1)
 
