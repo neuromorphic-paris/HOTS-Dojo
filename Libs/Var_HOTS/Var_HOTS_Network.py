@@ -710,7 +710,7 @@ class Var_HOTS_Net:
                 recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                     self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                     self.taus[layer], layer_data.copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
-            recording_results = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
+            recording_results,_,_ = self.vaes[layer][1].predict(np.array(recording_surfaces), batch_size=batch_size)
             if layer != 0:
                 new_data=events_from_activations(recording_results, [layer_data[0][range(0,len(layer_data[0]),self.polarities[layer])],
                                                                             layer_data[1][range(0,len(layer_data[0]),self.polarities[layer])]])

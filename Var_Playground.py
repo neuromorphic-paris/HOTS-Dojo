@@ -68,7 +68,7 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [6,8]
+latent_variables = [2,8]
 surfaces_dimensions = [[11,11],[15,15]]
 taus = [1000,5000]
 learning_rate = [0.008,0.008]
@@ -137,7 +137,7 @@ print('Prediction rate is '+str(prediction_rate*100)+'%')
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
  events, new_data, wewewewe, we, oh]=Net.reconstruct(dataset_learning, 6, 0, 1300, 35, 35)
 import numpy as np
-test=np.abs(1-np.sqrt(np.mean(we**2,1)))
+test=np.abs(np.sqrt(np.mean(we**2,1)))
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
 
 #%% Histogram classifier training, not used anymore

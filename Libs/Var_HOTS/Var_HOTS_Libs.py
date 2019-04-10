@@ -285,6 +285,13 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
         result = c - log_var/2 - K.square(x - mean) / (2 * K.exp(log_var) + 1e-8)
         return result
     
+    def log_egg(x, R, var):
+        """log density of an egg distribution (I need to find a better name for fuck sake)"""
+        c = -K.abs(K.sum(K.square(x),axis=-1)-R**2)/(2*var)
+        eplus=np.exp(+(R**2)/(2*var))
+        eminus=np.exp(-(R**2)/(2*var))
+        result = c  - np.log(eminus*(2*np.pi*var*(eplus-1))**(latent_dim/2)+eplus*(2*np.pi*var*eminus)**(latent_dim/2) + 1e-8)
+        return result
     
     # network parameters
     input_shape = (original_dim, )
@@ -293,7 +300,8 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # build encoder model
     inputs = Input(shape=input_shape, name='encoder_input')
     x = Dense(intermediate_dim, activation='sigmoid')(inputs)
-    z_mean = Dense(latent_dim, name='z_mean')(x)
+    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
+    z_mean = Dense(latent_dim, name='z_mean')(x1)
     z_log_var = Dense(latent_dim, name='z_log_var')(x)
     
     # use reparameterization trick to push the sampling out as input
@@ -309,7 +317,8 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # build decoder model
     latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
     x = Dense(intermediate_dim, activation='sigmoid')(latent_inputs)
-    outputs = Dense(original_dim, activation='sigmoid')(x)
+    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
+    outputs = Dense(original_dim, activation='sigmoid')(x1)
     
     # instantiate decoder model
     decoder = Model(latent_inputs, outputs, name='decoder')
@@ -327,6 +336,20 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
     reconstruction_loss = mse(inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
+    R = 4
+    std_egg = 2
+    def monte_carlo_kl_div_EGG(args):
+        mean, log_std = args
+        batch = K.shape(mean)[0]
+        dim = K.int_shape(mean)[1]
+        for k in range(n_samples_carlo):
+            epsilon = K.random_normal(shape=(batch, dim))
+            z = mean + K.exp(0.5*log_std+1e-8) * epsilon
+            try:
+                loss += K.sum(log_normal2(z, mean, log_std), -1) - log_egg(z, R, std_egg) 
+            except NameError:
+                loss = K.sum(log_normal2(z, mean, log_std), -1) - log_egg(z, R, std_egg) 
+        return loss / n_samples_carlo
     
     def monte_carlo_kl_div(args):
         mean, log_std = args
@@ -341,13 +364,13 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
                 loss = K.sum(log_normal2(z, mean, log_std) - log_stdnormal(z) , -1)
         return loss / n_samples_carlo
     
-    carlo = Lambda(monte_carlo_kl_div)([z_mean, z_log_var])
+    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_log_var])
     
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
     kl_loss = K.sum(kl_loss, axis=-1)
     kl_loss *= -0.5
-    vae_loss = K.mean(reconstruction_loss )#+ kl_loss)#+ carlo) 
+    vae_loss = K.mean(reconstruction_loss + carlo)#+ kl_loss)#
     vae.add_loss(vae_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
