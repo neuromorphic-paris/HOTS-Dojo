@@ -68,10 +68,10 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [6,8]
+latent_variables = [2,2]
 surfaces_dimensions = [[11,11],[15,15]]
 taus = [1000,5000]
-learning_rate = [0.008,0.008]
+learning_rate = [0.08,0.08]
 coding_costraint = 1
 
 first_layer_polarities = dataset_polarities

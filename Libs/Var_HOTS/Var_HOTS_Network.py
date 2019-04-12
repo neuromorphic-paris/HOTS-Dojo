@@ -110,7 +110,7 @@ class Var_HOTS_Net:
 
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
-            batch_size = 500
+            batch_size = 125
             for recording in range(len(input_data)):
                 n_batch = len(input_data[recording][0]) // batch_size
                 
@@ -140,43 +140,43 @@ class Var_HOTS_Net:
                     recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                         self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
-                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
+#                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
 #                all_surfaces = all_surfaces + [(i==0)*recording_surfaces[ind]+(i==1)*null_surfaces[ind] for i in range(2) for ind in range(len(recording_surfaces))]
-                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
+#                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
                 all_surfaces = all_surfaces + recording_surfaces
             all_surfaces=np.array(all_surfaces)
-            all_surfaces_plus_null= np.array(all_surfaces_plus_null)
+#            all_surfaces_plus_null= np.array(all_surfaces_plus_null)
             # pre training 
             print('Pre training')
-            tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
-            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
-                     [np.zeros([100000,self.latent_variables[layer]]), 
-                      0*np.ones([100000,self.latent_variables[layer]]),
-                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
-                     epochs=5, batch_size=batch_size)
+#            tsurf_size = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]
+#            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+#                     [np.zeros([100000,self.latent_variables[layer]]), 
+#                      0*np.ones([100000,self.latent_variables[layer]**2]),
+#                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
+#                     epochs=5, batch_size=batch_size)
+#            
+#            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+#            np.zeros([100000,tsurf_size]), shuffle=False,
+#                     epochs=5, batch_size=batch_size)
+#                    
+#                    
+#            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
+#                     epochs=10, batch_size=batch_size,
+#                     validation_data=(all_surfaces, None))
+#            
+#            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
+#                     [np.zeros([100000,self.latent_variables[layer]]), 
+#                      0*np.ones([100000,self.latent_variables[layer]**2]),
+#                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
+#                     epochs=10, batch_size=batch_size)
+#            
+#            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
+#            np.zeros([100000,tsurf_size]), shuffle=False,
+#                     epochs=10, batch_size=batch_size)
             
-            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
-            np.zeros([100000,tsurf_size]), shuffle=False,
-                     epochs=5, batch_size=batch_size)
-                    
-                    
-            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
+            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
                      epochs=10, batch_size=batch_size,
-                     validation_data=(all_surfaces_plus_null, None))
-            
-            self.vaes[layer][1].fit(np.zeros([100000,tsurf_size]),
-                     [np.zeros([100000,self.latent_variables[layer]]), 
-                      0*np.ones([100000,self.latent_variables[layer]]),
-                      0*np.ones([100000,self.latent_variables[layer]])], shuffle=False,
-                     epochs=10, batch_size=batch_size)
-            
-            self.vaes[layer][2].fit(np.zeros([100000,self.latent_variables[layer]]),
-            np.zeros([100000,tsurf_size]), shuffle=False,
-                     epochs=10, batch_size=batch_size)
-            
-            self.vaes[layer][0].fit(all_surfaces_plus_null, shuffle=False,
-                     epochs=1, batch_size=batch_size,
-                     validation_data=(all_surfaces_plus_null, None))
+                     validation_data=(all_surfaces, None))
 #            all_surfaces=all_surfaces[::2]
             current_pos = 0
             for recording in range(len(input_data)):                

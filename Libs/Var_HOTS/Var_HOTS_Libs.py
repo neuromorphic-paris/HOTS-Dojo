@@ -11,12 +11,13 @@ to the upcoming Var Hots paper
  
 """
 
-from keras.layers import Lambda, Input, Dense, BatchNormalization
+from keras.layers import Lambda, Input, Dense, BatchNormalization, Reshape
 from keras.models import Model, Sequential
 from keras.losses import mse
 from keras.utils import plot_model
 from keras import backend as K
 from keras import optimizers, regularizers
+import tensorflow as tf
 from itertools import compress
 
 import numpy as np 
@@ -35,12 +36,13 @@ def sampling(args):
         z (tensor): sampled latent vector
     """
 
-    z_mean, z_log_var = args
+    z_mean, z_L = args
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
     # by default, random_normal has mean=0 and std=1.0
     epsilon = K.random_normal(shape=(batch, dim))
-    return z_mean + K.exp(0.5 * z_log_var) * epsilon
+    result = (z_mean + tf.einsum('ijk,ik->ij',z_L,epsilon))
+    return result
 
 
 # =============================================================================
@@ -285,6 +287,13 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
         result = c - log_var/2 - K.square(x - mean) / (2 * K.exp(log_var) + 1e-8)
         return result
     
+    def log_multi_normal(x, mean, L):
+        """log density of a normalized gaussian of mean(mean) and variance exp(log_var)"""
+        c = - 0.5 * np.log(2*np.pi)
+        sigma= tf.linalg.matmul(L,L,transpose_b=True)
+        result = c  - 0.5*tf.einsum('ij,ij->i',tf.einsum('ijk,ik->ij',tf.linalg.inv(sigma),(x-mean)),(x-mean)) - 0.5*K.log(tf.linalg.det(sigma)+1e-8)
+        return result
+    
     def log_egg(x, R, var):
         """log density of an egg distribution (I need to find a better name for fuck sake)"""
         c = -K.abs(K.sum(K.square(x),axis=-1)-R**2)/(2*var)
@@ -302,14 +311,14 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     x = Dense(intermediate_dim, activation='sigmoid')(inputs)
     x1 = Dense(intermediate_dim, activation='sigmoid')(x)
     z_mean = Dense(latent_dim, name='z_mean')(x1)
-    z_log_var = Dense(latent_dim, name='z_log_var')(x)
-    
+    z_L_array = Dense(latent_dim**2, name='z_L_array')(x1)
+    z_L = Reshape((latent_dim,latent_dim), name='z_L')(z_L_array)
     # use reparameterization trick to push the sampling out as input
     # note that "output_shape" isn't necessary with the TensorFlow backend
-    z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
+    z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_L])
     
     # instantiate encoder model
-    encoder = Model(inputs, [z_mean, z_log_var, z], name='encoder')
+    encoder = Model(inputs, [z_mean, z_L_array, z], name='encoder')
     encoder.summary()
     encoder.compile(loss='mean_squared_error', optimizer='adam')
     #plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
@@ -336,19 +345,19 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
     reconstruction_loss = mse(inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
-    R = 4
-    std_egg = 2
+    R = 2
+    std_egg = 0.6
     def monte_carlo_kl_div_EGG(args):
-        mean, log_std = args
+        mean, z_L = args
         batch = K.shape(mean)[0]
         dim = K.int_shape(mean)[1]
         for k in range(n_samples_carlo):
             epsilon = K.random_normal(shape=(batch, dim))
-            z = mean + K.exp(0.5*log_std+1e-8) * epsilon
+            z = mean + tf.einsum('ijk,ik->ij',z_L,epsilon)
             try:
-                loss += K.sum(log_normal2(z, mean, log_std), -1) - log_egg(z, R, std_egg) 
+                loss += log_multi_normal(z, mean, z_L) - dim*log_egg(z, R, std_egg) 
             except NameError:
-                loss = K.sum(log_normal2(z, mean, log_std), -1) - log_egg(z, R, std_egg) 
+                loss = log_multi_normal(z, mean, z_L) - dim*log_egg(z, R, std_egg) 
         return loss / n_samples_carlo
     
     def monte_carlo_kl_div(args):
@@ -364,12 +373,12 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
                 loss = K.sum(log_normal2(z, mean, log_std) - log_stdnormal(z) , -1)
         return loss / n_samples_carlo
     
-    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_log_var])
+    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_L])
     
     reconstruction_loss *= original_dim
-    kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_log_var)
-    kl_loss = K.sum(kl_loss, axis=-1)
-    kl_loss *= -0.5
+#    kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_L)
+#    kl_loss = K.sum(kl_loss, axis=-1)
+#    kl_loss *= -0.5
     vae_loss = K.mean(reconstruction_loss + carlo)#+ kl_loss)#
     vae.add_loss(vae_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
