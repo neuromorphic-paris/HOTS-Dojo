@@ -36,6 +36,27 @@ def sampling(args):
         z (tensor): sampled latent vector
     """
 
+    z_mean, z_log_var = args
+    batch = K.shape(z_mean)[0]
+    dim = K.int_shape(z_mean)[1]
+    # by default, random_normal has mean=0 and std=1.0
+    epsilon = K.random_normal(shape=(batch, dim))
+    result = z_mean + K.exp(z_log_var*0.5)*epsilon
+    return result
+
+# reparameterization trick
+# instead of sampling from Q(z|X), sample eps = N(0,I)
+# z = z_mean + sqrt(var)*eps
+# =============================================================================  
+def sampling_egg(args):
+    """
+    Reparameterization trick by sampling fr an isotropic unit Gaussian.
+    Arguments :
+        args (tensor): mean and log of variance of Q(z|X)
+    Returns :
+        z (tensor): sampled latent vector
+    """
+
     z_mean, z_L = args
     batch = K.shape(z_mean)[0]
     dim = K.int_shape(z_mean)[1]
@@ -43,7 +64,6 @@ def sampling(args):
     epsilon = K.random_normal(shape=(batch, dim))
     result = (z_mean + tf.einsum('ijk,ik->ij',z_L,epsilon))
     return result
-
 
 # =============================================================================
 def events_from_activations(activations, events):
@@ -253,7 +273,7 @@ def create_mlp(input_size, hidden_size, output_size, learning_rate):
     
 
 # Let's try with a small predefined network    
-def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding_costraint):
+def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, learning_rate, coding_costraint):
     """
     Function used to create a small autoencoder used each layer of Var HOTS
     Arguments :
@@ -307,27 +327,28 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     
     # VAE model = encoder + decoder
     # build encoder model
-    inputs = Input(shape=input_shape, name='encoder_input')
-    x = Dense(intermediate_dim, activation='sigmoid')(inputs)
-    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
-    z_mean = Dense(latent_dim, name='z_mean')(x1)
-    z_L_array = Dense(latent_dim**2, name='z_L_array')(x1)
-    z_L = Reshape((latent_dim,latent_dim), name='z_L')(z_L_array)
+    inputs = Input(shape=input_shape, name='encoder_input')    
+    original_inputs = Input(shape=(input_dimension,), name='original_input')
+    x = Dense(intermediate_dim, activation='relu')(inputs)
+    z_mean = Dense(latent_dim, name='z_mean')(x)
+    z_log_var = Dense(latent_dim, name='z_log_var')(x)
+#    z_L_array = Dense(latent_dim**2, name='z_L_array')(x1)
+#    z_L = Reshape((latent_dim,latent_dim), name='z_L')(z_L_array)
     # use reparameterization trick to push the sampling out as input
     # note that "output_shape" isn't necessary with the TensorFlow backend
-    z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_L])
-    
+    z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
+#    z = Lambda(sampling_egg, output_shape=(latent_dim,), name='z')([z_mean, z_L])
+
     # instantiate encoder model
-    encoder = Model(inputs, [z_mean, z_L_array, z], name='encoder')
+    encoder = Model(inputs, [z_mean, z_log_var, z], name='encoder')
     encoder.summary()
     encoder.compile(loss='mean_squared_error', optimizer='adam')
     #plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
     
     # build decoder model
     latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
-    x = Dense(intermediate_dim, activation='sigmoid')(latent_inputs)
-    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
-    outputs = Dense(original_dim, activation='sigmoid')(x1)
+    x = Dense(intermediate_dim, activation='relu')(latent_inputs)
+    outputs = Dense(input_dimension)(x)
     
     # instantiate decoder model
     decoder = Model(latent_inputs, outputs, name='decoder')
@@ -338,13 +359,13 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
     
     # instantiate VAE model
     outputs = decoder(encoder(inputs)[2])
-    vae = Model(inputs, outputs, name='vae_mlp')
+    vae = Model([inputs, original_inputs], outputs, name='vae_mlp')
     
     L2_z = K.sum(K.square(z_mean),axis=-1)/latent_dim
     L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
     # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
     # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
+    reconstruction_loss = mse(original_inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
     R = 2
     std_egg = 0.6
     def monte_carlo_kl_div_EGG(args):
@@ -373,13 +394,13 @@ def create_vae(original_dim, latent_dim, intermediate_dim, learning_rate, coding
                 loss = K.sum(log_normal2(z, mean, log_std) - log_stdnormal(z) , -1)
         return loss / n_samples_carlo
     
-    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_L])
+#    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_L])
     
     reconstruction_loss *= original_dim
-#    kl_loss = 1 + z_log_var - K.square(z_mean) - K.exp(z_L)
-#    kl_loss = K.sum(kl_loss, axis=-1)
-#    kl_loss *= -0.5
-    vae_loss = K.mean(reconstruction_loss + carlo)#+ kl_loss)#
+    kl_loss = 1 + z_log_var - K.square(z_mean-2) - K.exp(z_log_var)
+    kl_loss = K.sum(kl_loss, axis=-1)
+    kl_loss *= -0.5
+    vae_loss = K.mean(reconstruction_loss + kl_loss)#+ carlo)
     vae.add_loss(vae_loss)
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)

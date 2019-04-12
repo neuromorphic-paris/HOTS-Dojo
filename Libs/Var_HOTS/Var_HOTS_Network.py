@@ -106,11 +106,12 @@ class Var_HOTS_Net:
             #intermediate_dim = self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][0]
             intermediate_dim = 40
             self.vaes.append(create_vae(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
-                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
+                                        self.latent_variables[layer], self.surfaces_dimensions[0][0]*self.surfaces_dimensions[0][1]*self.polarities[0],
+                                        intermediate_dim, learning_rate[layer], coding_costraint))
 
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
-            batch_size = 125
+            batch_size = 500
             for recording in range(len(input_data)):
                 n_batch = len(input_data[recording][0]) // batch_size
                 
@@ -145,6 +146,8 @@ class Var_HOTS_Net:
 #                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
                 all_surfaces = all_surfaces + recording_surfaces
             all_surfaces=np.array(all_surfaces)
+            if layer == 0:
+                original_surfaces = all_surfaces
 #            all_surfaces_plus_null= np.array(all_surfaces_plus_null)
             # pre training 
             print('Pre training')
@@ -174,9 +177,9 @@ class Var_HOTS_Net:
 #            np.zeros([100000,tsurf_size]), shuffle=False,
 #                     epochs=10, batch_size=batch_size)
             
-            self.vaes[layer][0].fit(all_surfaces, shuffle=False,
+            self.vaes[layer][0].fit([all_surfaces,original_surfaces], shuffle=False,
                      epochs=10, batch_size=batch_size,
-                     validation_data=(all_surfaces, None))
+                     validation_data=([all_surfaces,original_surfaces], None))
 #            all_surfaces=all_surfaces[::2]
             current_pos = 0
             for recording in range(len(input_data)):                
@@ -235,7 +238,8 @@ class Var_HOTS_Net:
 #            self.vaes.append(create_vae(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
 #                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
             self.vaes.append(create_sparse(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer],
-                                        self.latent_variables[layer], intermediate_dim, learning_rate[layer], coding_costraint))
+                                        self.latent_variables[layer], self.surfaces_dimensions[0][0]*self.surfaces_dimensions[0][1]*self.polarities[0],
+                                        intermediate_dim, learning_rate[layer], coding_costraint))
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
             batch_size = 500
@@ -669,10 +673,10 @@ class Var_HOTS_Net:
                      self.surfaces_dimensions[0][1], [data[0][event_ind],data[1][event_ind],data[2][event_ind]],
                      self.taus[0], data, self.polarities[0], minv=0.1) for event_ind in range(end_ind-beg_ind))   
         plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
-        predicted_surfaces,predicted_data, events, new_data, wewewewe, WE, OH =self.predict(data,xdim,ydim)       
+        predicted_surfaces,predicted_data, new_data, wewewewe, WE, OH =self.predict(data,xdim,ydim)       
         plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
                          predicted_data)
-        return [predicted_surfaces, predicted_data, input_surfaces, data, events, new_data, wewewewe, WE, OH]
+        return [predicted_surfaces, predicted_data, input_surfaces, data, new_data, wewewewe, WE, OH]
 
     def predict(self, input_data, xdim, ydim):
 
@@ -691,6 +695,7 @@ class Var_HOTS_Net:
                 event = [[layer_data[0][event_ind],
                           layer_data[1][event_ind],
                           layer_data[2][event_ind]]for event_ind in range(n_batch*batch_size)] 
+                original_cut_data = layer_data
             else :
                 OH = recording_results
                 event = [[layer_data[0][event_ind],
@@ -718,60 +723,25 @@ class Var_HOTS_Net:
                 new_data=events_from_activations(recording_results, layer_data)
             layer_data=new_data
         latent_activity = recording_results
-        for layer in range(self.layers-1,-1,-1):
-            # The code is going to run on gpus, to improve performances rather than 
-            # a pure online algorithm I am going to minibatch 
-            # These are the reference frames, only timestamps and position are required
-            # As multiple activations generates multiple equal events with different polarities
-            # only one is used as a reference
-            event = [[layer_data[0][event_ind],
-                      layer_data[1][event_ind]] for event_ind in range(0,len(layer_data[0]),self.latent_variables[layer])] 
-            decoding_surfaces = self.vaes[layer][2].predict(np.array(latent_activity), batch_size=batch_size)
-            if layer!=0:
-                wewewewe=decoding_surfaces
-                WE = latent_activity
-                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event)(self.surfaces_dimensions[layer][0],
-                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
-                                decoding_surfaces[event_ind], self.polarities[layer]) for event_ind in range(len(event)))
-                # Concatenating everythong to have a structure similiar to layer_data
-                length_data = len(events)*len(events[0][0])
-                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
-                            np.zeros(length_data, dtype=int), np.zeros(length_data, dtype=float)]
-                print(np.shape(events))
-                for ind in range(1,len(events)):
-                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
-                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
-                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
-                    new_data[3][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][3]
-                    
-                print(len(new_data[0]))
-                new_data=event_cutter(new_data,self.polarities[layer],self.taus[layer], 0.1, xdim, ydim, self.surfaces_dimensions[layer])
-                print(len(new_data[0]))
-                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2]),np.array(new_data[3])]
-                latent_activity = [[new_data[3][(ind*self.polarities[layer])+pol]for pol in range(self.polarities[layer])]for ind in range(len(new_data[3])//self.polarities[layer])]
-#            else:
-#                 events, new_data, wewewewe, WE, OH = [[],[],[],[],[]]
-#            else:   
-#                events=Parallel(n_jobs=self.threads)(delayed(Reverse_Time_Surface_event_no_rate)(self.surfaces_dimensions[layer][0],
-#                                self.surfaces_dimensions[layer][1], event[event_ind].copy(),
-#                                decoding_surfaces[event_ind], self.taus[0], self.polarities[layer]) for event_ind in range(len(event)))
-#                # Concatenating everythong to have a structure similiar to layer_data
-#                length_data = len(events)*len(events[0][0])
-#                new_data = [np.zeros(length_data, dtype=int), np.zeros([length_data,2], dtype=int),
-#                            np.zeros(length_data, dtype=int)]
-#                print(np.shape(events))
-#                for ind in range(1,len(events)):
-#                    new_data[0][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][0]
-#                    new_data[1][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][1]
-#                    new_data[2][ind*len(events[0][0]):(ind+1)*len(events[0][0])]=events[ind][2]
-#                    
-#                print(len(new_data[0]))
-#                new_data=event_cutter_no_rate(new_data,self.polarities[layer],self.taus[layer],10, xdim, ydim, self.surfaces_dimensions[layer])
-#                print(len(new_data[0]))
-#                layer_data=[np.array(new_data[0]),np.array(new_data[1]),np.array(new_data[2])]
-            reference_events = [np.array(layer_data[0][::self.latent_variables[layer]]),
-                                np.array(layer_data[1][::self.latent_variables[layer]])]
-        return decoding_surfaces, reference_events, events, new_data, wewewewe, WE, OH
+        # The code is going to run on gpus, to improve performances rather than 
+        # a pure online algorithm I am going to minibatch 
+        # These are the reference frames, only timestamps and position are required
+        # As multiple activations generates multiple equal events with different polarities
+        # only one is used as a reference
+
+        decoding_surfaces = self.vaes[-1][2].predict(np.array(latent_activity), batch_size=batch_size)
+        wewewewe=decoding_surfaces
+        WE = latent_activity
+
+#        for event_ind in range(len(event)):
+#            Reverse_Time_Surface_event(self.surfaces_dimensions[0][0],
+#                            self.surfaces_dimensions[0][1], event[event_ind].copy(),
+#                            decoding_surfaces[event_ind], self.polarities[0])
+        # Concatenating everythong to have a structure similiar to layer_data
+
+            
+
+        return decoding_surfaces, original_cut_data, new_data, wewewewe, WE, OH
 
         
     def predict_old(self, input_data, xdim, ydim):
