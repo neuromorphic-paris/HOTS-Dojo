@@ -322,6 +322,10 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
         result = c  - np.log(eminus*(2*np.pi*var*(eplus-1))**(latent_dim/2)+eplus*(2*np.pi*var*eminus)**(latent_dim/2) + 1e-8)
         return result
     
+    def val_metric(y_true, y_pred):
+        actual_y_true=y_true[1]
+#        return mse(actual_y_true,y_pred)
+        return 5
     # network parameters
     input_shape = (original_dim, )
     
@@ -361,11 +365,7 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
     outputs = decoder(encoder(inputs)[2])
     vae = Model([inputs, original_inputs], outputs, name='vae_mlp')
     
-    L2_z = K.sum(K.square(z_mean),axis=-1)/latent_dim
-    L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
-    # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1) 
-    # VAE loss = mse_loss + kl_loss
-    reconstruction_loss = mse(original_inputs, outputs) #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
+
     R = 2
     std_egg = 0.6
     def monte_carlo_kl_div_EGG(args):
@@ -395,7 +395,12 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
         return loss / n_samples_carlo
     
 #    carlo = Lambda(monte_carlo_kl_div_EGG)([z_mean, z_L])
-    
+
+    L2_z = K.sum(K.square(z_mean-2),axis=-1)/latent_dim
+    L2_inputs = K.sum(K.square(inputs),axis=-1)/original_dim
+    # + coding_costraint*K.log(K.abs(L2_inputs-L2_z)+1)  #+ coding_costraint*K.abs(L2_inputs-L2_z)/(L2_z+0.0001) 
+    # VAE loss = mse_loss + kl_lo
+    reconstruction_loss = mse(original_inputs, outputs) #+ coding_costraint/(L2_z+1e4)    
     reconstruction_loss *= original_dim
     kl_loss = 1 + z_log_var - K.square(z_mean-2) - K.exp(z_log_var)
     kl_loss = K.sum(kl_loss, axis=-1)
@@ -405,6 +410,10 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
     #sgd = optimizers.SGD(lr=learning_rate, decay=decay, momentum=momentum, nesterov=True)
     adam = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
     vae.compile(optimizer=adam)
+    # Per via di un bug di keras, non posso usare metriche custom come al solito per via del fatto che uso una loss custom 
+    # workaround trovato su https://github.com/keras-team/keras/issues/9459
+    vae.metrics_tensors.append(mse(original_inputs, outputs))
+    vae.metrics_names.append("Mse_only")
     
     return vae, encoder, decoder
 
@@ -499,9 +508,9 @@ def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
         if x0+xoff>=xdim or x0-xoff<0 or y0+yoff>=ydim or y0-yoff<0 :
             continue
         original_image[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
-        mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0]).astype(bool)
+        mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += (input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])+1e9).astype(bool)
     plt.figure()
-    plt.imshow(original_image)
+    plt.imshow(original_image/mean_norm, vmin=0, vmax=0.5)
 
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##
