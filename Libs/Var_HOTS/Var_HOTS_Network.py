@@ -71,6 +71,7 @@ class Var_HOTS_Net:
         # attribute containing all optimization errors computed in each layer 
         # and sublayer
         self.errors = []
+        self.history = []
   
     
 
@@ -272,9 +273,9 @@ class Var_HOTS_Net:
 #            np.zeros([100000,tsurf_size]), shuffle=False,
 #                     epochs=10, batch_size=batch_size)
             
-            self.vaes[layer][0].fit([all_surfaces,delayed_surfaces], shuffle=False,
+            self.history.append(self.vaes[layer][0].fit([all_surfaces,delayed_surfaces], shuffle=False,
                      epochs=30, batch_size=batch_size,
-                     validation_data=([all_surfaces_test,delayed_surfaces_test], None))
+                     validation_data=([all_surfaces_test,delayed_surfaces_test], None)))
             
 #            all_surfaces=all_surfaces[::2]
             current_pos = 0
@@ -310,7 +311,7 @@ class Var_HOTS_Net:
                 # Generate new events only if I am not at the last layer
                 if layer != (self.layers-1):
                     if layer != 0:
-                        new_data_test.append(events_from_activations(recording_results, [input_data_test[recording][0][range(0,len(input_data_test[recording][0]),self.polarities[layer])],
+                        new_data_test.append(events_from_activations(recording_results_test, [input_data_test[recording][0][range(0,len(input_data_test[recording][0]),self.polarities[layer])],
                                                                                     input_data_test[recording][1][range(0,len(input_data_test[recording][0]),self.polarities[layer])]]))
                     else:
                         new_data_test.append(events_from_activations(recording_results_test, input_data_test[recording]))
@@ -786,20 +787,34 @@ class Var_HOTS_Net:
     
     # UNDER WORK #
     # =============================================================================      
-    def reconstruct(self, dataset, recording, nevents, time, xdim, ydim):
+    def reconstruct(self, dataset, recording, nevents, time, delay, xdim, ydim):
         reference_ind=np.argmin(np.abs(dataset[recording][0]-time))
+        reference_ind_delay=np.argmin(np.abs(dataset[recording][0]-(time+delay)))
         end_ind = reference_ind
         beg_ind = reference_ind-nevents
+        end_ind_delay = reference_ind_delay
+        beg_ind_delay = reference_ind_delay-nevents
         if beg_ind<0:
             raise ValueError('There are only '+str(nevents+beg_ind)+' events before the speciefied time stamp, I cannot draw the surfaces')
-        data = [dataset[recording][0][beg_ind:end_ind],dataset[recording][1][beg_ind:end_ind],dataset[recording][2][beg_ind:end_ind]]      
+        data = [dataset[recording][0][beg_ind:end_ind],dataset[recording][1][beg_ind:end_ind],dataset[recording][2][beg_ind:end_ind]] 
+        data_delayed = [dataset[recording][0][beg_ind_delay:end_ind_delay],dataset[recording][1][beg_ind_delay:end_ind_delay],dataset[recording][2][beg_ind_delay:end_ind_delay]] 
         input_surfaces=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                      self.surfaces_dimensions[0][1], [data[0][event_ind],data[1][event_ind],data[2][event_ind]],
                      self.taus[0], data, self.polarities[0], minv=0.1) for event_ind in range(nevents))   
-        plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
+        input_surfaces_delay=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                     self.surfaces_dimensions[0][1], [data_delayed[0][event_ind],data_delayed[1][event_ind],data_delayed[2][event_ind]],
+                     self.taus[0], data_delayed, self.polarities[0], minv=0.1) for event_ind in range(nevents))   
+        original_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
+        original_image_delayed=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces_delay,data_delayed)
         predicted_surfaces,predicted_data, new_data, wewewewe, WE =self.predict(data,xdim,ydim)       
-        plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
+        prediction_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
                          predicted_data)
+        print("Difference with original: "+str(np.sum(np.square(original_image-prediction_image))))
+        print("Difference with delayed image : "+str(np.sum(np.square(prediction_image-original_image_delayed))))
+        plt.figure()
+        plt.imshow(np.square(original_image-prediction_image), vmin=0, vmax=1)
+        plt.figure()
+        plt.imshow(np.square(prediction_image-original_image_delayed), vmin=0, vmax=0.4)
         return [predicted_surfaces, predicted_data, input_surfaces, data, new_data, wewewewe, WE]
 
     def predict(self, input_data, xdim, ydim):

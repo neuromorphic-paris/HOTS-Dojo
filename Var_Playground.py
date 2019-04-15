@@ -49,6 +49,11 @@ dataset_learning, labels_learning, dataset_testing, labels_testing = Cards_loade
                                                                                   testing_set_length, shuffle_seed)
 legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes used for
                                                 # plots
+             
+#%% Faces dataset
+#import hdf5storage
+#mat = hdf5storage.loadmat('/home/marcorax93/Repositories/Prediction/Sparse-HOTS/Datasets/faces_hots2016/faces.mat')
+
                                                 
 #%% Network Creation
 
@@ -69,8 +74,8 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # =============================================================================
 
 latent_variables = [6,8]
-surfaces_dimensions = [[11,11],[15,15]]
-taus = [1000,5000]
+surfaces_dimensions = [[11,11],[11,11]]
+taus = [1000,1000]
 learning_rate = [0.001,0.001]
 coding_costraint = 1
 
@@ -83,7 +88,7 @@ Net = Var_HOTS_Net(latent_variables, surfaces_dimensions, taus, first_layer_pola
 
 #%% Learning phase
 
-delay = [700,3000]
+delay = [1000,2000]
 
 start_time = time.time()
 
@@ -108,14 +113,16 @@ variables_ind = [0,1]
 variable_fix = 0
 
 Net.plot_vae_decode_2D(0, variables_ind, variable_fix)   
-Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
+#Net.plot_vae_decode_2D(layer, variables_ind, variable_fix)
 Net.plot_vae_space_2D(0, variables_ind, legend, labels_learning, dataset_learning)
-Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning, dataset_learning)
+#Net.plot_vae_space_2D(layer, variables_ind, legend, labels_learning, dataset_learning)
+plt.figure()
+plt.plot(Net.history[0].history['val_Mse_only'][0])
 
 plt.pause(0.1)
 
 #%% Mlp classifier training
-
+    
 #number_of_labels=len(legend)
 #mlp_learningx_rate = 0.001
 #Net.mlp_classification_train(labels_learning,   
@@ -133,11 +140,11 @@ plt.pause(0.1)
 #with open(parameter_folder+file_name, 'wb') as f:
 #    pickle.dump([latent_variables, surfaces_dimensions, taus, learning_rate, first_layer_polarities,
 #                 coding_costraint, mlp_learning_rate], f) 
-
+#
 #%% Prediction
 #from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
- new_data, wewewewe, we]=Net.reconstruct(dataset_learning, 0, 2000, 14000, 35, 35)
+ new_data, wewewewe, we]=Net.reconstruct(dataset_testing, 5, 200, 11000, delay[-1], 35, 35)
 import numpy as np
 test=np.abs(np.sqrt(np.sum(we**2,1)))
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)

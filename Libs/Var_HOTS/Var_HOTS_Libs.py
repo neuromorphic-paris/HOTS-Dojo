@@ -334,8 +334,11 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
     inputs = Input(shape=input_shape, name='encoder_input')    
     original_inputs = Input(shape=(input_dimension,), name='original_input')
     x = Dense(intermediate_dim, activation='relu')(inputs)
-    z_mean = Dense(latent_dim, name='z_mean')(x)
-    z_log_var = Dense(latent_dim, name='z_log_var')(x)
+    x1 = Dense(intermediate_dim, activation='relu')(x)
+    x2 = Dense(intermediate_dim, activation='relu')(x1)
+    x3 = Dense(intermediate_dim, activation='relu')(x2)
+    z_mean = Dense(latent_dim, name='z_mean')(x3)
+    z_log_var = Dense(latent_dim, name='z_log_var')(x3)
 #    z_L_array = Dense(latent_dim**2, name='z_L_array')(x1)
 #    z_L = Reshape((latent_dim,latent_dim), name='z_L')(z_L_array)
     # use reparameterization trick to push the sampling out as input
@@ -352,6 +355,9 @@ def create_vae(original_dim, latent_dim, input_dimension, intermediate_dim, lear
     # build decoder model
     latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
     x = Dense(intermediate_dim, activation='relu')(latent_inputs)
+    x1 = Dense(intermediate_dim, activation='relu')(x)
+    x2 = Dense(intermediate_dim, activation='relu')(x1)
+    x3 = Dense(intermediate_dim, activation='relu')(x3)
     outputs = Dense(input_dimension)(x)
     
     # instantiate decoder model
@@ -449,11 +455,11 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     inputs = Input(shape=input_shape, name='encoder_input')    
 #    norm = BatchNormalization()(inputs)
     x = Dense(intermediate_dim, activation='relu')(inputs)
-#    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
-#    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
-#    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
+    x1 = Dense(intermediate_dim, activation='relu')(x)
+    x2 = Dense(intermediate_dim, activation='relu')(x1)
+    x3 = Dense(intermediate_dim, activation='relu')(x2)
 #    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=egg)(x)
-    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=regularizers.l1(1e-9))(x)
+    encoded = Dense(latent_dim, name='latent_vars', activity_regularizer=regularizers.l1(1e-9))(x3)
     
     
     
@@ -467,10 +473,10 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     latent_inputs = Input(shape=(latent_dim,), name='latent_vars')
 #    norm = BatchNormalization()(latent_inputs)
     x = Dense(intermediate_dim, activation='relu')(latent_inputs)
-#    x1 = Dense(intermediate_dim, activation='sigmoid')(x)
-#    x2 = Dense(intermediate_dim, activation='sigmoid')(x1)
-#    x3 = Dense(intermediate_dim, activation='sigmoid')(x2)
-    outputs = Dense(original_dim, name='decoded')(x)
+    x1 = Dense(intermediate_dim, activation='relu')(x)
+    x2 = Dense(intermediate_dim, activation='relu')(x1)
+    x3 = Dense(intermediate_dim, activation='relu')(x2)
+    outputs = Dense(original_dim, name='decoded')(x3)
     
     # instantiate decoder model
     decoder = Model(latent_inputs, outputs, name='decoder')
@@ -510,8 +516,8 @@ def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
         original_image[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
         mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += (input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])+1e9).astype(bool)
     plt.figure()
-    plt.imshow(original_image/mean_norm, vmin=0, vmax=0.5)
-
+    plt.imshow(original_image/mean_norm, vmin=0, vmax=0.3)
+    return original_image/mean_norm
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##
               ##  UNTIL A LAZY DEVELOPER WILL DECIDE WHAT TO DO WITH THEM     ##
