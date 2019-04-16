@@ -502,9 +502,9 @@ def create_sparse(original_dim, latent_dim, intermediate_dim, learning_rate, cod
     return sae, encoder, decoder
 
 
-def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
-    original_image = np.zeros([ydim,xdim])
-    mean_norm = np.ones([ydim,xdim])
+def plot_reconstruct(xdim,ydim,surfaces_dimensions, polarities, input_surfaces,input_events):
+    original_image = np.zeros([polarities,ydim,xdim])
+    mean_norm = np.ones([polarities,ydim,xdim])
     # To better deal with sourfaces centered on the borders
     xoff = surfaces_dimensions[0][0]//2
     yoff = surfaces_dimensions[0][1]//2
@@ -513,10 +513,11 @@ def plot_reconstruct(xdim,ydim,surfaces_dimensions,input_surfaces,input_events):
         y0 = input_events[1][i,1]
         if x0+xoff>=xdim or x0-xoff<0 or y0+yoff>=ydim or y0-yoff<0 :
             continue
-        original_image[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])
-        mean_norm[(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += (input_surfaces[i].reshape(surfaces_dimensions[0][1],surfaces_dimensions[0][0])+1e9).astype(bool)
-    plt.figure()
-    plt.imshow(original_image/mean_norm, vmin=0, vmax=0.3)
+        original_image[:,(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)] += input_surfaces[i].reshape(polarities, surfaces_dimensions[0][1],surfaces_dimensions[0][0])
+        mean_norm[:,(y0-yoff):(y0+yoff+1),(x0-xoff):(x0+xoff+1)]  += (input_surfaces[i].reshape(polarities, surfaces_dimensions[0][1],surfaces_dimensions[0][0])+1e9).astype(bool)
+    for pol in range(polarities):
+        plt.figure()
+        plt.imshow(original_image[pol]/mean_norm[pol], vmin=0, vmax=0.3)
     return original_image/mean_norm
 
              ## ELEPHANT GRAVEYARD, WHERE ALL THE UNUSED FUNCTIONS GO TO SLEEP, ##

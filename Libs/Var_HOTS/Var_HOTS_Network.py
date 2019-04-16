@@ -154,24 +154,25 @@ class Var_HOTS_Net:
                 # As a single time surface is build on all polarities, there is no need to build a time 
                 # surface per each event with a different polarity and equal time stamp, thus only 
                 # a fraction of the events are extracted here
+                print("****Number of total tasks: "+str(n_batch*batch_size//self.polarities[layer])+" ****")
                 if layer != 0 :
-                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                    recording_surfaces = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                         self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch*batch_size,self.polarities[layer]))
                     
-                    delay_recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                    delay_recording_surfaces = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                                         self.surfaces_dimensions[0][1], delayed_event[event_ind].copy(),
-                                        self.taus[0], original_data[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data[recording][0]),self.polarities[0]))
+                                        self.taus[0], original_data[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data[recording][0])))
                     
                     
                 else:
-                    recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                    recording_surfaces = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event[event_ind].copy(),
                                         self.taus[layer], input_data[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch*batch_size))
 
-                    delay_recording_surfaces = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                    delay_recording_surfaces = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                                         self.surfaces_dimensions[0][1], delayed_event[event_ind].copy(),
-                                        self.taus[0], original_data[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data[recording][0]),self.polarities[0]))
+                                        self.taus[0], original_data[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data[recording][0])))
 
 #                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
 #                all_surfaces = all_surfaces + [(i==0)*recording_surfaces[ind]+(i==1)*null_surfaces[ind] for i in range(2) for ind in range(len(recording_surfaces))]
@@ -179,7 +180,7 @@ class Var_HOTS_Net:
                 all_surfaces = all_surfaces + recording_surfaces
                 delayed_surfaces = delayed_surfaces + delay_recording_surfaces
 
-                
+               
             #   TESTING SURFACE PREPARATION #
             # The code is going to run on gpus, to improve performances rather than 
             # a pure online algorithm I am going to minibatch 
@@ -216,25 +217,26 @@ class Var_HOTS_Net:
                 # As a single time surface is build on all polarities, there is no need to build a time 
                 # surface per each event with a different polarity and equal time stamp, thus only 
                 # a fraction of the events are extracted here
+                print("****Number of total tasks: "+str(n_batch_test*batch_size//self.polarities[layer])+" ****")     
                 if layer != 0 :
                     
-                    recording_surfaces_test = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                    recording_surfaces_test = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event_test[event_ind].copy(),
                                         self.taus[layer], input_data_test[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(0,n_batch_test*batch_size,self.polarities[layer]))
                     
-                    delay_recording_surfaces_test = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                    delay_recording_surfaces_test = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                                         self.surfaces_dimensions[0][1], delayed_event_test[event_ind].copy(),
-                                        self.taus[0], original_data_test[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data_test[recording][0]),self.polarities[0]))
+                                        self.taus[0], original_data_test[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data_test[recording][0])))
                     
                 else:
                     
-                    recording_surfaces_test = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
+                    recording_surfaces_test = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[layer][0],
                                         self.surfaces_dimensions[layer][1], event_test[event_ind].copy(),
                                         self.taus[layer], input_data_test[recording].copy(), self.polarities[layer], minv=0.1) for event_ind in range(n_batch_test*batch_size))
 
-                    delay_recording_surfaces_test = Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
+                    delay_recording_surfaces_test = Parallel(n_jobs=self.threads, verbose=True)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                                         self.surfaces_dimensions[0][1], delayed_event_test[event_ind].copy(),
-                                        self.taus[0], original_data_test[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data_test[recording][0]),self.polarities[0]))
+                                        self.taus[0], original_data_test[recording].copy(), self.polarities[0], minv=0.1) for event_ind in range(0,len(original_data_test[recording][0])))
 #                null_surfaces = [np.zeros(self.surfaces_dimensions[layer][0]*self.surfaces_dimensions[layer][1]*self.polarities[layer]) for i in range(10000) ]  
 #                all_surfaces = all_surfaces + [(i==0)*recording_surfaces[ind]+(i==1)*null_surfaces[ind] for i in range(2) for ind in range(len(recording_surfaces))]
 #                all_surfaces_plus_null = all_surfaces + recording_surfaces +  null_surfaces
@@ -804,17 +806,17 @@ class Var_HOTS_Net:
         input_surfaces_delay=Parallel(n_jobs=self.threads)(delayed(Time_Surface_event)(self.surfaces_dimensions[0][0],
                      self.surfaces_dimensions[0][1], [data_delayed[0][event_ind],data_delayed[1][event_ind],data_delayed[2][event_ind]],
                      self.taus[0], data_delayed, self.polarities[0], minv=0.1) for event_ind in range(nevents))   
-        original_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces,data)
-        original_image_delayed=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,input_surfaces_delay,data_delayed)
+        original_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions, self.polarities[0], input_surfaces, data)
+        original_image_delayed=plot_reconstruct(xdim,ydim,self.surfaces_dimensions, self.polarities[0], input_surfaces_delay, data_delayed)
         predicted_surfaces,predicted_data, new_data, wewewewe, WE =self.predict(data,xdim,ydim)       
-        prediction_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions,predicted_surfaces,
+        prediction_image=plot_reconstruct(xdim,ydim,self.surfaces_dimensions, self.polarities[0], predicted_surfaces,
                          predicted_data)
         print("Difference with original: "+str(np.sum(np.square(original_image-prediction_image))))
         print("Difference with delayed image : "+str(np.sum(np.square(prediction_image-original_image_delayed))))
-        plt.figure()
-        plt.imshow(np.square(original_image-prediction_image), vmin=0, vmax=1)
-        plt.figure()
-        plt.imshow(np.square(prediction_image-original_image_delayed), vmin=0, vmax=0.4)
+#        plt.figure()
+#        plt.imshow(np.square(original_image-prediction_image), vmin=0, vmax=1)
+#        plt.figure()
+#        plt.imshow(np.square(prediction_image-original_image_delayed), vmin=0, vmax=0.4)
         return [predicted_surfaces, predicted_data, input_surfaces, data, new_data, wewewewe, WE]
 
     def predict(self, input_data, xdim, ydim):

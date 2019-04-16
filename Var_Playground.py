@@ -13,7 +13,7 @@ import time
 import os
 import pickle
 import datetime
-
+import numpy as np
 
 # Data loading variables
 from Libs.Cards_loader import Cards_loader
@@ -38,6 +38,9 @@ shuffle_seed = 12 # seed used for dataset shuffling, if set to 0 the process wil
 # Thus learning_set_length+testing_set_length needs to be < number_of_batch_per_label
 # i.e. 17
 
+res_x=35
+res_y=35
+
 learning_set_length = 12 
 testing_set_length = 5
 data_folder = "Datasets/Cards/usable/pips/"
@@ -50,10 +53,24 @@ dataset_learning, labels_learning, dataset_testing, labels_testing = Cards_loade
 legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes used for
                                                 # plots
              
-#%% Faces dataset
-#import hdf5storage
-#mat = hdf5storage.loadmat('/home/marcorax93/Repositories/Prediction/Sparse-HOTS/Datasets/faces_hots2016/faces.mat')
+#%% Translating figures dataset
+                                                
+res_x=240
+res_y=180
+dataset_polarities = 2
 
+data_file = "Datasets/Translating_figures/events.txt"
+data=[]
+data_tmp = np.genfromtxt(data_file, unpack=True).tolist()
+data.append(np.array((data_tmp[0]), dtype=float)*1e6)
+data[0]=data[0].astype(int)
+data.append(np.array([data_tmp[1],data_tmp[2]], dtype=int).transpose())
+data.append(np.array(data_tmp[3], dtype=int))
+data_tmp=[]
+data_length=len(data[0])
+dataset_learning=[[data[0][:data_length//40],data[1][:data_length//40],data[2][:data_length//5]]]
+dataset_testing=[[data[0][-data_length//40:],data[1][-data_length//40:],data[2][-data_length//5:]]]
+data=[]
                                                 
 #%% Network Creation
 
@@ -73,10 +90,10 @@ legend = ("clubs","diamonds","heart", "spades") # Legend containing the labes us
 # threads (int) : the max number of parallel threads used to timesurface creation
 # =============================================================================
 
-latent_variables = [6,8]
-surfaces_dimensions = [[11,11],[11,11]]
-taus = [1000,1000]
-learning_rate = [0.001,0.001]
+latent_variables = [6]
+surfaces_dimensions = [[11,11]]
+taus = [10000]
+learning_rate = [0.001]
 coding_costraint = 1
 
 first_layer_polarities = dataset_polarities
@@ -88,7 +105,7 @@ Net = Var_HOTS_Net(latent_variables, surfaces_dimensions, taus, first_layer_pola
 
 #%% Learning phase
 
-delay = [1000,2000]
+delay = [30000,0,0,0]
 
 start_time = time.time()
 
@@ -109,7 +126,7 @@ print("Learning elapsed time : "+str(elapsed_time))
 # =============================================================================
 
 layer = 1
-variables_ind = [0,1] 
+variables_ind = [2,3] 
 variable_fix = 0
 
 Net.plot_vae_decode_2D(0, variables_ind, variable_fix)   
@@ -144,7 +161,7 @@ plt.pause(0.1)
 #%% Prediction
 #from Libs.Var_HOTS.Time_Surface_generators import Time_Surface_all
 [predicted_surfaces, predicted_data, real_surfaces, real_data, 
- new_data, wewewewe, we]=Net.reconstruct(dataset_testing, 5, 200, 11000, delay[-1], 35, 35)
+ new_data, wewewewe, we]=Net.reconstruct(dataset_learning, 0, 2000, 200000, delay[-1], res_x, res_y)
 import numpy as np
 test=np.abs(np.sqrt(np.sum(we**2,1)))
 #Time_Surface_all(35, 35, 1000, 1000, dataset_learning[6], 1, minv=0.1, verbose=True)
